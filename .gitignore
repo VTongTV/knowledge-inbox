@@ -1,0 +1,28 @@
+# interview surface: agent rules and internal docs stay local
+AGENTS.md
+docs/
+
+# secrets
+.env
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# data
+*.db
+*.db-journal
+
+# node
+node_modules/
+dist/
+
+# os junk
+.DS_Store
+Thumbs.db
+
+# assignment source pdf, not part of the build
+*.pdf
