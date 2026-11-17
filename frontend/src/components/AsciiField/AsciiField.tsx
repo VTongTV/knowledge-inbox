@@ -197,7 +197,7 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
     if (reducedMotion && drawn.current) return;
     if (document.hidden) return;
     const t = reducedMotion ? 0 : state.clock.elapsedTime;
-    const dt = reducedMotion ? 0 : Math.min(delta, 0.05);
+    const dt = reducedMotion ? 0 : Math.min(delta, 0.25);
     school.update(t, dt);
     drawn.current = true;
 
@@ -300,3 +300,4 @@ function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
 
   return <primitive object={mesh} />;
 }
+

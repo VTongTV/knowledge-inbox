@@ -260,7 +260,7 @@ export class School {
     this.ensurePool();
     this.cellCount = 0;
     this.blurCellCount = 0;
-    if (dt > 0.05) dt = 0.05;
+    if (dt > 0.25) dt = 0.25;
 
     for (const f of this.fish) {
       this.stepFish(f, t, dt);
@@ -383,6 +383,32 @@ export class School {
       }
     }
 
+    // the tail: attached to the body and wags with the sway. without it
+    // the shape reads as a blob instead of a fish.
+    const tailRows = f.kind === "small" ? [1] : [2, 1];
+    for (let r = 0; r < tailRows.length; r++) {
+      const width = tailRows[r];
+      const back = (f.profile.length + r) * CELL;
+      const wag = Math.sin(t * 1.2 + f.phase) * 1.6;
+      const center = (width - 1) / 2;
+      for (let col = 0; col < width; col++) {
+        const px = head.x - fx * back + lx * ((col - center) + wag) * CELL;
+        const py = head.y - fy * back + ly * ((col - center) + wag) * CELL;
+        const sparkle = slot === f.sparkleSlot && t < f.sparkleUntil;
+        this.pushCell(
+          Math.round(px / CELL) * CELL,
+          Math.round(py / CELL) * CELL,
+          this.pickGlyph(f.id * 131 + slot, t),
+          sparkle ? SPARKLE_GLYPH : glyph,
+          tile,
+          sparkle ? 0.8 : Math.max(0.55, bodyTileScale * 0.72),
+          sparkle ? 1 : 0.75,
+          "body",
+        );
+        slot++;
+      }
+    }
+
     this.emitWake(f, t);
   }
 
@@ -488,4 +514,5 @@ export class School {
     return WAKE_GLYPHS[Math.floor(hash01(seed, Math.floor(t * 4)) * WAKE_GLYPHS.length)];
   }
 }
+
 
