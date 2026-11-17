@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppFrame } from "./components/AppFrame";
 import { LogbookButton } from "./components/LogbookButton";
 import { LogbookDrawer } from "./components/LogbookDrawer";
+import { HelpDialog } from "./components/HelpDialog";
 import { Hero } from "./components/Hero";
 import type { ThreadMessage } from "./components/Hero";
 import { AsciiField } from "./components/AsciiField/AsciiField";
@@ -22,6 +23,7 @@ export default function App() {
   const [thread, setThread] = useState<ThreadMessage[]>([]);
   const [asking, setAsking] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const nextId = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
@@ -110,10 +112,20 @@ export default function App() {
     [loadItems, showToast],
   );
 
+  const resetChat = useCallback(() => {
+    abortRef.current?.abort();
+    setThread([]);
+    setAsking(false);
+    document.getElementById("composer-input")?.focus();
+  }, []);
+
   return (
     <AppFrame
       blurFish={<AsciiField layer="blur" />}
       sharpFish={<AsciiField layer="sharp" />}
+      onResetChat={resetChat}
+      onOpenSaved={() => setDrawerOpen(true)}
+      onHelp={() => setHelpOpen(true)}
     >
       <LogbookButton onOpen={() => setDrawerOpen(true)} />
       <Hero messages={thread} asking={asking} onAsk={ask} onIngest={ingest} />
@@ -126,6 +138,7 @@ export default function App() {
         error={itemsError}
         onRetry={() => void loadItems()}
       />
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </AppFrame>
   );
 }
