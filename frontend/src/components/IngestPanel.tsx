@@ -83,9 +83,8 @@ export function IngestPanel({ onIngest, onSaved }: IngestPanelProps) {
 
       <button type="button" className="ingest-save" onClick={save} disabled={busy || !content.trim()}>
         {busy ? <Loader2 size={13} className="spin" aria-hidden /> : null}
-        Save
+        Save to Logbook
       </button>
     </div>
   );
 }
-

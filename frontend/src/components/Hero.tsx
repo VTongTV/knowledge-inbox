@@ -18,13 +18,11 @@ export interface ThreadMessage {
 interface HeroProps {
   messages: ThreadMessage[];
   asking: boolean;
-  savedCount: number | null;
   onAsk: (question: string) => void;
   onIngest: (kind: ItemType, content: string) => Promise<{ chunks: number }>;
-  onOpenSaved: () => void;
 }
 
-export function Hero({ messages, asking, savedCount, onAsk, onIngest, onOpenSaved }: HeroProps) {
+export function Hero({ messages, asking, onAsk, onIngest }: HeroProps) {
   const [draft, setDraft] = useState("");
   const [openSource, setOpenSource] = useState<number | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -86,7 +84,7 @@ export function Hero({ messages, asking, savedCount, onAsk, onIngest, onOpenSave
                 <span className="pulse-dot" />
                 <span className="pulse-dot" />
                 <span className="pulse-dot" />
-                <span style={{ marginLeft: 8 }}>searching your saved items</span>
+                <span style={{ marginLeft: 8 }}>searching your logbook</span>
               </div>
             )}
           </div>
@@ -96,13 +94,11 @@ export function Hero({ messages, asking, savedCount, onAsk, onIngest, onOpenSave
           value={draft}
           onChange={setDraft}
           busy={asking}
-          savedCount={savedCount}
           onAsk={(question) => {
             onAsk(question);
             setDraft("");
           }}
           onIngest={onIngest}
-          onOpenSaved={onOpenSaved}
         />
 
         {pristine ? <CommandChips onInsert={(text) => setDraft((cur) => cur + text)} /> : null}
@@ -111,4 +107,3 @@ export function Hero({ messages, asking, savedCount, onAsk, onIngest, onOpenSave
     </>
   );
 }
-

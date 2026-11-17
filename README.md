@@ -11,7 +11,7 @@ A personal knowledge inbox. Save a note or a URL, then ask a question over what 
 ## Stack
 
 - Backend: FastAPI, sqlite, numpy, fastembed with `BAAI/bge-small-en-v1.5`, httpx against an OpenRouter-compatible chat endpoint.
-- Frontend: React and TypeScript on Vite. The interface is a dark glassmorphic single screen: time-aware greeting, rotating tagline, chat composer, command chips, and a drawer with the saved items, over a slow aurora ambient field. Typography is Geist Variable and JetBrains Mono, styled with Tailwind v4 and a few shadcn primitives bound to the design tokens.
+- Frontend: React and TypeScript on Vite. The interface is a dark, single-screen home in the style of knowledge inbox: greeting, rotating tagline, and a chat composer over a living ASCII fish field rendered with three.js. Typography is Geist and JetBrains Mono, styled with Tailwind v4 and a few shadcn primitives bound to measured design tokens.
 
 ## Run it
 
@@ -85,6 +85,5 @@ The suite covers the store round-trip, the chunker, the HTML extractor, the URL 
 ```
 backend/app/   config, store, text, embed, rag, main
 backend/tests/ one test module per app module
-frontend/src/  the home screen: composer wired to POST /query, Saved drawer wired to GET /items, ingest through the composer popover to POST /ingest. The aurora ambient is pure CSS
+frontend/src/  the knowledge inbox home screen: composer wired to POST /query, Logbook drawer wired to GET /items, ingest through the composer popover to POST /ingest, plus an AsciiField module that runs the fish simulation in pure TypeScript and draws it with three.js
 ```
-

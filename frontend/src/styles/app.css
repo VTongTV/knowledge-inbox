@@ -1,5 +1,5 @@
-/* the knowledge inbox home screen. geometry and components, one file on purpose.
-   shape scale: full-viewport frame / 22 composer / 12 tiles, pills and buttons / 999 chips. */
+/* knowledge inbox app geometry and components. one file on purpose.
+   shape scale: 26 frame / 22 composer / 12 tiles, pills and buttons / 999 chips. */
 
 * { box-sizing: border-box }
 
@@ -35,8 +35,8 @@ body {
   z-index: 1;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.032) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.032) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 14px 14px;
 }
 
@@ -48,61 +48,9 @@ body {
   background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.35) 100%);
 }
 
-/* ---- ambient aurora: slow drifting light, the only motion ---- */
-
-.aurora {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.85;
-  will-change: transform;
-}
-
-.aurora-a {
-  width: 64vmax;
-  height: 64vmax;
-  top: -26%;
-  left: -20%;
-  background: radial-gradient(circle at 45% 45%, #302e6f 0%, rgba(48, 46, 111, 0.45) 45%, transparent 72%);
-  animation: drift-a 46s ease-in-out infinite alternate;
-}
-
-.aurora-b {
-  width: 58vmax;
-  height: 58vmax;
-  right: -22%;
-  bottom: -26%;
-  background: radial-gradient(circle at 55% 55%, #166068 0%, rgba(22, 96, 104, 0.45) 45%, transparent 72%);
-  animation: drift-b 54s ease-in-out infinite alternate;
-}
-
-.aurora-c {
-  width: 36vmax;
-  height: 36vmax;
-  top: 24%;
-  right: 20%;
-  background: radial-gradient(circle at 50% 50%, #4a2a4e 0%, rgba(74, 42, 78, 0.4) 45%, transparent 70%);
-  animation: drift-c 38s ease-in-out infinite alternate;
-}
-
-@keyframes drift-a {
-  from { transform: translate(0, 0) scale(1) }
-  to { transform: translate(9vw, 6vh) scale(1.14) }
-}
-
-@keyframes drift-b {
-  from { transform: translate(0, 0) scale(1.08) }
-  to { transform: translate(-8vw, -7vh) scale(1) }
-}
-
-@keyframes drift-c {
-  from { transform: translate(0, 0) scale(1) }
-  to { transform: translate(-6vw, 8vh) scale(1.25) }
-}
-
-
+/* fish canvases drop into these slots */
+.fish-blur { position: absolute; inset: 0; z-index: 2; pointer-events: none }
+.fish-sharp { position: absolute; inset: 0; z-index: 5; pointer-events: none }
 
 /* ---- sidebar ---- */
 
@@ -112,10 +60,8 @@ body {
   top: 0;
   bottom: 0;
   width: 74px;
-  background: rgba(10, 11, 17, 0.55);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  background: var(--sidebar-bg);
+  border-right: 1px solid #0b0c0f;
   z-index: 4;
   transition: width 0.2s ease, opacity 0.2s ease;
   overflow: hidden;
@@ -156,8 +102,8 @@ body {
   transition: background 0.15s ease;
 }
 
-.nav-item:hover { background: rgba(255, 255, 255, 0.06) }
-.nav-item.active { background: rgba(255, 255, 255, 0.08) }
+.nav-item:hover { background: var(--raised-bg) }
+.nav-item.active { background: var(--active-bg) }
 
 .active-indicator {
   position: absolute;
@@ -170,8 +116,6 @@ body {
   z-index: 1;
   transition: top 0.2s ease;
 }
-
-
 
 .avatar {
   position: absolute;
@@ -187,9 +131,9 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* ---- saved button ---- */
+/* ---- logbook button ---- */
 
-.saved-button {
+.logbook-button {
   position: absolute;
   right: 23px;
   top: 22px;
@@ -198,22 +142,19 @@ body {
   align-items: center;
   gap: 8px;
   height: 36px;
-  padding: 0 12px;
+  padding: 0 10px;
   border-radius: var(--radius-tile);
-  border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.02);
   color: #fdfeff;
   font-family: var(--font-sans);
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease;
 }
 
-.saved-button:hover { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.13) }
+.logbook-button:hover { background: rgba(255, 255, 255, 0.05) }
 
 .kbd-chip {
   background: var(--active-bg);
@@ -302,18 +243,16 @@ body {
 .composer {
   margin-top: 22px;
   width: 606px;
-  max-width: 100%;
+  max-width: calc(100% - 0px);
   min-height: 123px;
-  background: var(--glass-fill);
-  border: 1px solid var(--glass-border);
+  background: var(--composer-bg);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-composer);
   padding: 18px 20px 13px;
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
   box-shadow:
-    inset 0 1px 0 var(--glass-hi),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
-    0 24px 64px rgba(0, 0, 0, 0.45);
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 0 3px rgba(255, 255, 255, 0.012),
+    0 8px 40px rgba(0, 0, 0, 0.5);
 }
 
 .composer-textarea {
@@ -349,27 +288,27 @@ body {
   transition: background 0.15s ease;
 }
 
-.icon-btn:hover { background: rgba(255, 255, 255, 0.06) }
+.icon-btn:hover { background: var(--raised-bg) }
 .icon-btn[aria-pressed="true"] { color: var(--gold) }
 
-.status-chip {
+.model-pill {
   display: flex;
   align-items: center;
   gap: 8px;
   height: 40px;
-  padding: 0 14px;
+  padding: 0 12px;
   border-radius: var(--radius-pill);
-  background: var(--glass-fill-soft);
-  border: 1px solid var(--glass-border);
+  background: var(--raised-bg);
+  border: 1px solid var(--border-faint);
   color: var(--text-btn);
   font-family: var(--font-sans);
-  font-size: 13.5px;
-  white-space: nowrap;
+  font-size: 15.5px;
+  font-weight: 500;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 
-.status-chip:hover { border-color: rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.06) }
+.model-pill:hover { border-color: var(--border-soft) }
 
 .hint {
   margin-left: auto;
@@ -409,18 +348,16 @@ body {
   height: 34px;
   padding: 0 17px;
   border-radius: 999px;
-  background: var(--glass-fill-soft);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--app-bg);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-chip);
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.chip:hover { border-color: rgba(255, 255, 255, 0.16); color: var(--text-hi) }
+.chip:hover { border-color: var(--border-soft); color: var(--text-hi) }
 
 /* ---- footnote ---- */
 
@@ -456,8 +393,8 @@ body {
 .msg-user {
   align-self: flex-end;
   max-width: 78%;
-  background: rgba(24, 25, 28, 0.75);
-  border: 1px solid var(--glass-border);
+  background: #18191c;
+  border: 1px solid var(--border-soft);
   border-radius: 14px 14px 4px 14px;
   padding: 8px 14px;
   font-size: 14.5px;
@@ -467,12 +404,9 @@ body {
 
 .msg-bot {
   align-self: stretch;
-  background: var(--glass-fill-soft);
-  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-soft);
   border-radius: 14px 14px 14px 4px;
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
   padding: 12px 14px;
   font-size: 13.5px;
   line-height: 1.55;
@@ -534,10 +468,8 @@ body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
-  background: rgba(24, 25, 28, 0.8);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #18191c;
+  border: 1px solid var(--border-soft);
   border-radius: 10px;
   padding: 8px 14px;
   font-family: var(--font-mono);
@@ -545,11 +477,11 @@ body {
   color: var(--text-btn);
 }
 
-/* ---- saved drawer ---- */
+/* ---- logbook drawer ---- */
 
-.saved-panel { width: 360px !important; background: rgba(12, 13, 19, 0.88) !important; border-left: 1px solid var(--glass-border) !important; backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%); color: var(--text-hi) !important }
+.logbook-panel { width: 360px !important; background: var(--sidebar-bg) !important; border-left: 1px solid var(--border-soft) !important; color: var(--text-hi) !important }
 
-.saved-sub { color: var(--text-hint); font-size: 12.5px }
+.logbook-sub { color: var(--text-hint); font-size: 12.5px }
 
 .item-row {
   display: flex;
@@ -709,54 +641,29 @@ body {
   to { transform: rotate(360deg) }
 }
 
+.model-menu {
+  background: var(--raised-bg) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: var(--radius-tile) !important;
+  min-width: 140px !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
+}
+
+.model-item { color: var(--text-btn) !important; display: flex; justify-content: space-between; gap: 16px }
+.model-item:hover { background: var(--active-bg) !important }
+
+.model-note {
+  padding: 6px 8px 2px;
+  border-top: 1px solid var(--border-faint);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-hint);
+}
+
 .src-expand-head {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-hint);
   margin-bottom: 4px;
 }
-
-
-
-/* ---- help dialog ---- */
-
-.help-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  display: grid;
-  place-items: center;
-  background: rgba(4, 5, 8, 0.45);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-}
-
-.help-card {
-  width: 320px;
-  background: var(--glass-fill);
-  border: 1px solid var(--glass-border);
-  border-radius: 18px;
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  box-shadow:
-    inset 0 1px 0 var(--glass-hi),
-    0 24px 64px rgba(0, 0, 0, 0.5);
-  padding: 20px;
-}
-
-.help-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-hi) }
-
-.help-list { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px }
-
-.help-row { display: flex; align-items: center; gap: 12px; font-size: 12.5px; color: var(--text-greeting) }
-
-.help-row .kbd-chip { min-width: 76px; text-align: center }
-
-/* ---- focus and motion ---- */
-
-:focus-visible { outline: 1.5px solid rgba(255, 255, 255, 0.35); outline-offset: 2px }
-
-@media (prefers-reduced-motion: reduce) {
-  .aurora { animation: none }
-}
-
