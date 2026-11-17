@@ -1,0 +1,111 @@
+/* knowledge inbox design tokens. hex values measured from the reference video.
+   shadcn semantic variables map onto the same values below. */
+
+:root {
+  /* surfaces */
+  --page-bg: #ebeae3;
+  --app-bg: #0a0b10;
+  --sidebar-bg: #08090c;
+  --composer-bg: #090a0f;
+  --raised-bg: #101116;
+  --active-bg: #18191c;
+  --send-bg: #18191e;
+  --grid-line: #0d0e13;
+
+  /* borders */
+  --border-faint: #121318;
+  --border-soft: #1e1f24;
+  --border-top-hi: #2e2f34;
+  --composer-bottom: #27282d;
+
+  /* text */
+  --text-hi: #ffffff;
+  --text-btn: #f3f4f9;
+  --text-greeting: #b7b8bd;
+  --text-placeholder: #6f7075;
+  --text-chip: #a1a2a7;
+  --text-hint: #65666b;
+  --text-send-icon: #9b9ca1;
+  --text-kbd: #949598;
+  --text-footnote: #59585b;
+
+  /* accents */
+  --gold: #d3c8bb;
+  --gold-tile: #6d6559;
+  --blue: #c1c4d9;
+  --blue-tile: #4d5065;
+  --head-accent-from: #e6dcae;
+  --head-accent-to: #b9bff2;
+  --dot-gold: #c9b88a;
+
+  --font-sans: "Geist Variable", "Geist", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  /* shape scale: one radius system, documented in app.css */
+  --radius-tile: 12px;
+  --radius-pill: 11px;
+  --radius-composer: 22px;
+  --radius-frame: 26px;
+
+  /* shadcn semantic bindings onto the same palette */
+  --background: var(--app-bg);
+  --foreground: var(--text-hi);
+  --card: var(--raised-bg);
+  --card-foreground: var(--text-btn);
+  --popover: var(--raised-bg);
+  --popover-foreground: var(--text-btn);
+  --primary: #e9e9ee;
+  --primary-foreground: var(--app-bg);
+  --secondary: var(--active-bg);
+  --secondary-foreground: var(--text-btn);
+  --muted: var(--raised-bg);
+  --muted-foreground: var(--text-placeholder);
+  --accent: var(--active-bg);
+  --accent-foreground: var(--text-hi);
+  --border: var(--border-soft);
+  --input: var(--border-faint);
+  --ring: var(--border-top-hi);
+  --radius: var(--radius-tile);
+  --sidebar: var(--sidebar-bg);
+  --sidebar-foreground: var(--text-hi);
+  --sidebar-primary: var(--active-bg);
+  --sidebar-primary-foreground: var(--text-btn);
+  --sidebar-accent: var(--active-bg);
+  --sidebar-accent-foreground: var(--text-btn);
+  --sidebar-border: #0b0c0f;
+  --sidebar-ring: var(--border-top-hi);
+}
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
