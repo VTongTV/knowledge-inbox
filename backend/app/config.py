@@ -27,6 +27,9 @@ class Settings:
     chunk_overlap: int
     embed_model: str
     embed_dim: int
+    fetch_timeout: float
+    llm_timeout: float
+    cors_origins: list[str]
 
 
 def load_settings() -> Settings:
@@ -41,4 +44,7 @@ def load_settings() -> Settings:
         chunk_overlap=int(_env("CHUNK_OVERLAP", "60")),
         embed_model=_env("EMBED_MODEL", "BAAI/bge-small-en-v1.5"),
         embed_dim=int(_env("EMBED_DIM", "384")),
+        fetch_timeout=float(_env("FETCH_TIMEOUT", "10")),
+        llm_timeout=float(_env("LLM_TIMEOUT", "60")),
+        cors_origins=_env("CORS_ORIGINS", "http://localhost:5173").split(","),
     )
