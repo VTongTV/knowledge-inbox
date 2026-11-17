@@ -3,6 +3,7 @@
 import json
 import logging
 import sqlite3
+import threading
 from datetime import datetime, timezone
 
 import numpy as np
@@ -14,6 +15,7 @@ CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     type TEXT NOT NULL,
     raw TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS chunks (
@@ -47,8 +49,11 @@ class Store:
 
     def __init__(self, db_path: str) -> None:
         """open db_path and create the tables when they do not exist"""
+        self._lock = threading.Lock()
         try:
-            self._conn = sqlite3.connect(db_path)
+            # ponytail: one shared connection across the fastapi threadpool; a
+            # real write conflict needs a dedicated process or wal mode
+            self._conn = sqlite3.connect(db_path, check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
             self._conn.executescript(SCHEMA)
             self._conn.commit()
@@ -74,6 +79,7 @@ class Store:
         self,
         item_type: str,
         raw: str,
+        source: str,
         chunk_texts: list[str],
         embeddings: list[np.ndarray],
     ) -> int:
@@ -84,46 +90,56 @@ class Store:
             raise StoreError("an item needs at least one chunk")
         created_at = now_iso()
         try:
-            cursor = self._conn.cursor()
-            cursor.execute(
-                "INSERT INTO items (type, raw, created_at) VALUES (?, ?, ?)",
-                (item_type, raw, created_at),
-            )
-            item_id = cursor.lastrowid
-            assert item_id is not None
-            rows = [
-                (
-                    item_id,
-                    index,
-                    text,
-                    json.dumps(vec.astype(np.float32).tolist()),
+            with self._lock:
+                cursor = self._conn.cursor()
+                cursor.execute(
+                    "INSERT INTO items (type, raw, source, created_at) VALUES (?, ?, ?, ?)",
+                    (item_type, raw, source, created_at),
                 )
-                for index, (text, vec) in enumerate(zip(chunk_texts, embeddings))
-            ]
-            cursor.executemany(
-                "INSERT INTO chunks (item_id, chunk_index, text, embedding)"
-                " VALUES (?, ?, ?, ?)",
-                rows,
-            )
-            self._conn.commit()
+                item_id = cursor.lastrowid
+                assert item_id is not None
+                rows = [
+                    (
+                        item_id,
+                        index,
+                        text,
+                        json.dumps(vec.astype(np.float32).tolist()),
+                    )
+                    for index, (text, vec) in enumerate(zip(chunk_texts, embeddings))
+                ]
+                cursor.executemany(
+                    "INSERT INTO chunks (item_id, chunk_index, text, embedding)"
+                    " VALUES (?, ?, ?, ?)",
+                    rows,
+                )
+                self._conn.commit()
         except sqlite3.Error as exc:
             self._conn.rollback()
             raise StoreError(f"write failed: {exc}") from exc
         logger.info("item %d stored with %d chunks", item_id, len(rows))
         return item_id
 
+    def _select_items(
+        self, where: str = "", params: tuple[object, ...] = ()
+    ) -> list[sqlite3.Row]:
+        """run the item join with an optional where clause; lock for threadpool safety"""
+        sql = (
+            "SELECT i.id, i.type, i.raw, i.source, i.created_at,"
+            " COUNT(c.id) AS chunk_count"
+            " FROM items i LEFT JOIN chunks c ON c.item_id = i.id"
+        )
+        if where:
+            sql += f" WHERE {where}"
+        sql += " GROUP BY i.id ORDER BY i.id"
+        with self._lock:
+            try:
+                return self._conn.execute(sql, params).fetchall()
+            except sqlite3.Error as exc:
+                raise StoreError(f"list failed: {exc}") from exc
+
     def list_items(self) -> list[dict[str, object]]:
         """return every item with a preview and its chunk count"""
-        try:
-            rows = self._conn.execute(
-                "SELECT i.id, i.type, i.raw, i.created_at,"
-                " COUNT(c.id) AS chunk_count"
-                " FROM items i LEFT JOIN chunks c ON c.item_id = i.id"
-                " GROUP BY i.id ORDER BY i.id"
-            ).fetchall()
-        except sqlite3.Error as exc:
-            raise StoreError(f"list failed: {exc}") from exc
-        return [self._item_row(row) for row in rows]
+        return [self._item_row(row) for row in self._select_items()]
 
     @staticmethod
     def _item_row(row: sqlite3.Row) -> dict[str, object]:
@@ -132,10 +148,19 @@ class Store:
         return {
             "id": row["id"],
             "type": row["type"],
+            "source": row["source"],
             "created_at": row["created_at"],
             "preview": raw[:120],
             "chunk_count": row["chunk_count"],
         }
+
+    def get_item(self, item_id: int) -> dict[str, object] | None:
+        """one item with a preview and its chunk count, or none when missing"""
+        rows = self._select_items("i.id = ?", (item_id,))
+        if not rows:
+            logger.warning("item %d not found", item_id)
+            return None
+        return self._item_row(rows[0])
 
     def search(
         self, query_vec: np.ndarray, top_k: int
@@ -160,12 +185,13 @@ class Store:
 
     def _load_embeddings(self) -> list[tuple[int, int, str, np.ndarray]]:
         """read every chunk row off disk; used as the search source"""
-        try:
-            rows = self._conn.execute(
-                "SELECT item_id, chunk_index, text, embedding FROM chunks"
-            ).fetchall()
-        except sqlite3.Error as exc:
-            raise StoreError(f"read failed: {exc}") from exc
+        with self._lock:
+            try:
+                rows = self._conn.execute(
+                    "SELECT item_id, chunk_index, text, embedding FROM chunks"
+                ).fetchall()
+            except sqlite3.Error as exc:
+                raise StoreError(f"read failed: {exc}") from exc
         return [
             (row["item_id"], row["chunk_index"], row["text"], _decode(row["embedding"]))
             for row in rows

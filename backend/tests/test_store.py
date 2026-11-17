@@ -18,6 +18,7 @@ def _add(store: Store, item_id_offset: int = 0) -> int:
     return store.add_item(
         "note",
         f"raw number {item_id_offset}",
+        "",
         [f"chunk alpha {item_id_offset}", f"chunk beta {item_id_offset}"],
         [_vec(1.0), _vec(5.0)],
     )
@@ -48,7 +49,7 @@ def test_mismatched_counts_raise(tmp_path: Any) -> None:
     """chunks and embeddings must match one to one"""
     store = Store(str(tmp_path / "t.db"))
     with pytest.raises(StoreError):
-        store.add_item("note", "raw", ["only one chunk"], [_vec(1.0), _vec(2.0)])
+        store.add_item("note", "raw", "", ["only one chunk"], [_vec(1.0), _vec(2.0)])
     store.close()
 
 
@@ -56,20 +57,21 @@ def test_empty_chunks_raise(tmp_path: Any) -> None:
     """an item without chunks has nothing to search"""
     store = Store(str(tmp_path / "t.db"))
     with pytest.raises(StoreError):
-        store.add_item("note", "raw", [], [])
+        store.add_item("note", "raw", "", [], [])
     store.close()
 
 
 def test_list_items_shape_and_preview(tmp_path: Any) -> None:
     """list_items returns the api fields and a 120 char preview"""
     store = Store(str(tmp_path / "t.db"))
-    store.add_item("note", "x" * 200, ["one", "two"], [_vec(1.0), _vec(2.0)])
+    store.add_item("note", "x" * 200, "https://example.com/a", ["one", "two"], [_vec(1.0), _vec(2.0)])
     items = store.list_items()
     store.close()
     assert len(items) == 1
     item = items[0]
     assert item["id"] == 1
     assert item["type"] == "note"
+    assert item["source"] == "https://example.com/a"
     assert item["preview"] == "x" * 120
     assert item["chunk_count"] == 2
     assert item["created_at"]

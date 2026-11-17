@@ -33,7 +33,13 @@ def _vec() -> np.ndarray:
 def _seeded_store(tmp_path: Any) -> Store:
     """a store whose first chunk embeds exactly to _vec()"""
     store = Store(str(tmp_path / "rag.db"))
-    store.add_item("note", "raw", ["the answer text", "off topic"], [_vec(), np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float32)])
+    store.add_item(
+        "note",
+        "raw",
+        "",
+        ["the answer text", "off topic"],
+        [_vec(), np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float32)],
+    )
     return store
 
 
