@@ -1,19 +1,10 @@
-import { ArrowUpRight, Check, ChevronDown, Globe, Mic, Plus, Sparkles } from "lucide-react";
+import { ArrowUpRight, Mic, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { IngestPanel } from "./IngestPanel";
 import type { ItemType } from "../api";
-
-export type ModelName = "Auto" | "Fast" | "Balanced" | "Deep";
-const MODELS: ModelName[] = ["Auto", "Fast", "Balanced", "Deep"];
 
 interface ComposerProps {
   value: string;
@@ -57,8 +48,6 @@ function speechCtor(): SpeechRecognitionCtor | null {
 }
 
 export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerProps) {
-  const [model, setModel] = useState<ModelName>("Auto");
-  const [web, setWeb] = useState(false);
   const [listening, setListening] = useState(false);
   const [ingestOpen, setIngestOpen] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -145,35 +134,6 @@ export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerPro
             <IngestPanel onIngest={onIngest} onSaved={() => setIngestOpen(false)} />
           </PopoverContent>
         </Popover>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="model-pill" aria-label={`Model: ${model}`}>
-              <Sparkles size={16} aria-hidden />
-              <span>{model}</span>
-              <ChevronDown size={14} color="#8a8b90" aria-hidden />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="model-menu" align="start" sideOffset={8}>
-            {MODELS.map((name) => (
-              <DropdownMenuItem key={name} onSelect={() => setModel(name)} className="model-item">
-                <span>{name}</span>
-                {model === name ? <Check size={14} aria-hidden /> : null}
-              </DropdownMenuItem>
-            ))}
-            <div className="model-note">Only Auto is wired for this preview</div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <button
-          type="button"
-          className="icon-btn"
-          aria-pressed={web}
-          aria-label="Toggle web search"
-          onClick={() => setWeb((v) => !v)}
-        >
-          <Globe size={18} strokeWidth={1.75} aria-hidden />
-        </button>
 
         <button
           type="button"
