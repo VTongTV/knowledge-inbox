@@ -73,6 +73,10 @@ export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerPro
     el.style.height = `${Math.min(el.scrollHeight, 190)}px`;
   }, [value]);
 
+  useEffect(() => {
+    return () => recognitionRef.current?.stop();
+  }, []);
+
   function submit() {
     const question = value.trim();
     if (!question || busy) return;

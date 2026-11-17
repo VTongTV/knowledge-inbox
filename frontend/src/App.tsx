@@ -42,6 +42,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (toastTimer.current) window.clearTimeout(toastTimer.current);
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
     void loadItems(controller.signal);
     return () => controller.abort();
