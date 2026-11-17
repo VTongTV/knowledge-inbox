@@ -1,13 +1,4 @@
-import {
-  Bookmark,
-  CircleHelp,
-  Compass,
-  History,
-  PanelLeft,
-  Pause,
-  SquarePen,
-  Waves,
-} from "lucide-react";
+import { Bookmark, CircleHelp, PanelLeft, SquarePen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -18,27 +9,43 @@ interface NavDef {
   icon: LucideIcon;
   label: string;
   id: string;
+  action: "reset" | "saved" | "help" | "collapse";
 }
 
 const NAV_ITEMS: NavDef[] = [
-  { y: 108, icon: SquarePen, label: "New chat", id: "new-chat" },
-  { y: 158, icon: History, label: "History", id: "history" },
-  { y: 208, icon: Compass, label: "Explore", id: "explore" },
-  { y: 257, icon: Bookmark, label: "Saved", id: "saved" },
-  { y: 306, icon: Waves, label: "Flow", id: "flow" },
-  { y: 481, icon: Pause, label: "Pause", id: "pause" },
-  { y: 531, icon: CircleHelp, label: "Help", id: "help" },
-  { y: 580, icon: PanelLeft, label: "Collapse sidebar", id: "collapse" },
+  { y: 128, icon: SquarePen, label: "New chat", id: "new-chat", action: "reset" },
+  { y: 182, icon: Bookmark, label: "Saved", id: "saved", action: "saved" },
+  { y: 236, icon: CircleHelp, label: "Help", id: "help", action: "help" },
+  { y: 580, icon: PanelLeft, label: "Collapse sidebar", id: "collapse", action: "collapse" },
 ];
 
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  onReset: () => void;
+  onOpenSaved: () => void;
+  onHelp: () => void;
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, onReset, onOpenSaved, onHelp }: SidebarProps) {
   const [active, setActive] = useState("new-chat");
-  const activeY = NAV_ITEMS.find((i) => i.id === active)?.y ?? 108;
+  const activeY = NAV_ITEMS.find((i) => i.id === active)?.y ?? 128;
+
+  // saved and help are actions, not pages: the tile follows only new chat.
+  const run = (action: NavDef["action"]) => {
+    if (action === "collapse") {
+      onToggle();
+      return;
+    }
+    if (action === "reset") {
+      setActive("new-chat");
+      onReset();
+    } else if (action === "saved") {
+      onOpenSaved();
+    } else {
+      onHelp();
+    }
+  };
 
   return (
     <nav className={`sidebar${collapsed ? " collapsed" : ""}`} aria-label="Primary">
@@ -48,12 +55,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         type="button"
         className="nav-item"
         style={{ top: 42 }}
-        aria-label="knowledge inbox"
-        onClick={() => setActive("new-chat")}
+        aria-label="Knowledge Inbox"
+        onClick={() => run("reset")}
       >
-        <PixelLogo size={26} title="knowledge inbox" />
+        <PixelLogo size={26} title="Knowledge Inbox" />
       </button>
-      {NAV_ITEMS.map(({ y, icon: Icon, label, id }) => (
+      {NAV_ITEMS.map(({ y, icon: Icon, label, id, action }) => (
         <button
           key={id}
           type="button"
@@ -61,13 +68,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           style={{ top: y }}
           aria-label={label}
           aria-current={active === id ? "page" : undefined}
-          onClick={() => {
-            if (id === "collapse") {
-              onToggle();
-              return;
-            }
-            setActive(id);
-          }}
+          onClick={() => run(action)}
         >
           <Icon size={21} strokeWidth={1.75} aria-hidden />
         </button>

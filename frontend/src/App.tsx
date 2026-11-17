@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AppFrame } from "./components/AppFrame";
-import { LogbookButton } from "./components/LogbookButton";
-import { LogbookDrawer } from "./components/LogbookDrawer";
+import { SavedButton } from "./components/SavedButton";
+import { SavedDrawer } from "./components/SavedDrawer";
+import { HelpDialog } from "./components/HelpDialog";
 import { Hero } from "./components/Hero";
 import type { ThreadMessage } from "./components/Hero";
-import { AsciiField } from "./components/AsciiField/AsciiField";
 import {
   askQuestion,
   errorMessage,
@@ -14,7 +14,7 @@ import {
 } from "./api";
 import type { IngestedRow, ItemType, SavedItem } from "./api";
 
-/** asks one question, appends the user line and the answer to the thread. */
+/** loads the saved list, posts questions, tracks the drawer, toast and help. */
 export default function App() {
   const [items, setItems] = useState<SavedItem[] | null>(null);
   const [itemsLoading, setItemsLoading] = useState(true);
@@ -22,6 +22,7 @@ export default function App() {
   const [thread, setThread] = useState<ThreadMessage[]>([]);
   const [asking, setAsking] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const nextId = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
@@ -42,17 +43,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    void loadItems(controller.signal);
+    return () => controller.abort();
+  }, [loadItems]);
+
+  useEffect(() => {
     return () => {
       if (toastTimer.current) window.clearTimeout(toastTimer.current);
       abortRef.current?.abort();
     };
   }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadItems(controller.signal);
-    return () => controller.abort();
-  }, [loadItems]);
 
   const showToast = useCallback((text: string) => {
     setToast(text);
@@ -60,7 +61,7 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), 1600);
   }, []);
 
-  // ctrl+k opens the logbook anywhere on screen.
+  // ctrl+k toggles saved anywhere on screen.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -103,22 +104,37 @@ export default function App() {
   const ingest = useCallback(
     async (kind: ItemType, content: string): Promise<IngestedRow> => {
       const row = await ingestNoteOrUrl(kind, content);
-      showToast("Saved to Logbook");
+      showToast("Saved");
       void loadItems();
       return row;
     },
     [loadItems, showToast],
   );
 
+  const resetChat = useCallback(() => {
+    abortRef.current?.abort();
+    setThread([]);
+    setAsking(false);
+    document.getElementById("composer-input")?.focus();
+  }, []);
+
   return (
     <AppFrame
-      blurFish={<AsciiField layer="blur" />}
-      sharpFish={<AsciiField layer="sharp" />}
+      onResetChat={resetChat}
+      onOpenSaved={() => setDrawerOpen(true)}
+      onHelp={() => setHelpOpen(true)}
     >
-      <LogbookButton onOpen={() => setDrawerOpen(true)} />
-      <Hero messages={thread} asking={asking} onAsk={ask} onIngest={ingest} />
+      <SavedButton onOpen={() => setDrawerOpen(true)} />
+      <Hero
+        messages={thread}
+        asking={asking}
+        savedCount={items?.length ?? null}
+        onAsk={ask}
+        onIngest={ingest}
+        onOpenSaved={() => setDrawerOpen(true)}
+      />
       {toast && <div className="toast" role="status">{toast}</div>}
-      <LogbookDrawer
+      <SavedDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         items={items}
@@ -126,6 +142,7 @@ export default function App() {
         error={itemsError}
         onRetry={() => void loadItems()}
       />
+      <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </AppFrame>
   );
 }

@@ -1,33 +1,43 @@
-import { Menu } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-
+import { PixelLogo } from "./PixelLogo";
 import { Sidebar } from "./Sidebar";
 
 interface AppFrameProps {
   children: ReactNode;
-  /** the blurred fish layer, rendered first. */
-  blurFish: ReactNode;
-  /** the sharp fish layer, rendered on top with pointer-events none. */
-  sharpFish: ReactNode;
+  onResetChat: () => void;
+  onOpenSaved: () => void;
+  onHelp: () => void;
 }
 
-export function AppFrame({ children, blurFish, sharpFish }: AppFrameProps) {
+export function AppFrame({ children, onResetChat, onOpenSaved, onHelp }: AppFrameProps) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="app-frame">
+      <div className="aurora aurora-a" aria-hidden />
+      <div className="aurora aurora-b" aria-hidden />
+      <div className="aurora aurora-c" aria-hidden />
       <div className="app-grid" />
       <div className="app-vignette" />
-      <div className="fish-blur">{blurFish}</div>
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
+      <Sidebar
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((v) => !v)}
+        onReset={onResetChat}
+        onOpenSaved={onOpenSaved}
+        onHelp={onHelp}
+      />
       {collapsed && (
-        <button type="button" className="collapse-tab" aria-label="Expand sidebar" onClick={() => setCollapsed(false)}>
-          <Menu size={13} strokeWidth={2} />
+        <button
+          type="button"
+          className="collapse-tab"
+          aria-label="Expand sidebar"
+          onClick={() => setCollapsed(false)}
+        >
+          <PixelLogo size={10} />
         </button>
       )}
       {children}
-      <div className="fish-sharp">{sharpFish}</div>
     </div>
   );
 }

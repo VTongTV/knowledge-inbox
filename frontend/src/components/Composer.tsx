@@ -1,26 +1,20 @@
-import { ArrowUpRight, Check, ChevronDown, Globe, Mic, Plus, Sparkles } from "lucide-react";
+import { ArrowUpRight, Database, Mic, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { IngestPanel } from "./IngestPanel";
 import type { ItemType } from "../api";
-
-export type ModelName = "Auto" | "Fast" | "Balanced" | "Deep";
-const MODELS: ModelName[] = ["Auto", "Fast", "Balanced", "Deep"];
 
 interface ComposerProps {
   value: string;
   onChange: (value: string) => void;
   busy: boolean;
+  /** how many items are saved, or null while the first list load runs. */
+  savedCount: number | null;
   onAsk: (question: string) => void;
   onIngest: (kind: ItemType, content: string) => Promise<{ chunks: number }>;
+  onOpenSaved: () => void;
 }
 
 interface RecognitionResultItem {
@@ -56,9 +50,7 @@ function speechCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerProps) {
-  const [model, setModel] = useState<ModelName>("Auto");
-  const [web, setWeb] = useState(false);
+export function Composer({ value, onChange, busy, savedCount, onAsk, onIngest, onOpenSaved }: ComposerProps) {
   const [listening, setListening] = useState(false);
   const [ingestOpen, setIngestOpen] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -120,12 +112,12 @@ export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerPro
   }
 
   return (
-    <form className="composer" onSubmit={onSubmit} aria-label="Ask a question">
+    <form className="composer" onSubmit={onSubmit} aria-label="Ask Knowledge Inbox">
       <textarea
         ref={areaRef}
         id="composer-input"
         className="composer-textarea"
-        placeholder="Ask anything..."
+        placeholder="Ask Knowledge Inbox anything..."
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
@@ -137,7 +129,7 @@ export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerPro
       <div className="toolbar">
         <Popover open={ingestOpen} onOpenChange={setIngestOpen}>
           <PopoverTrigger asChild>
-            <button type="button" className="icon-btn" aria-label="Add a note or page">
+            <button type="button" className="icon-btn" aria-label="Save a note or a page">
               <Plus size={20} strokeWidth={1.75} aria-hidden />
             </button>
           </PopoverTrigger>
@@ -146,33 +138,14 @@ export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerPro
           </PopoverContent>
         </Popover>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="model-pill" aria-label={`Model: ${model}`}>
-              <Sparkles size={16} aria-hidden />
-              <span>{model}</span>
-              <ChevronDown size={14} color="#8a8b90" aria-hidden />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="model-menu" align="start" sideOffset={8}>
-            {MODELS.map((name) => (
-              <DropdownMenuItem key={name} onSelect={() => setModel(name)} className="model-item">
-                <span>{name}</span>
-                {model === name ? <Check size={14} aria-hidden /> : null}
-              </DropdownMenuItem>
-            ))}
-            <div className="model-note">Only Auto is wired for this preview</div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
         <button
           type="button"
-          className="icon-btn"
-          aria-pressed={web}
-          aria-label="Toggle web search"
-          onClick={() => setWeb((v) => !v)}
+          className="status-chip"
+          onClick={onOpenSaved}
+          aria-label="Open saved items"
         >
-          <Globe size={18} strokeWidth={1.75} aria-hidden />
+          <Database size={14} strokeWidth={1.75} aria-hidden />
+          <span>{savedCount ?? "…"} saved</span>
         </button>
 
         <button

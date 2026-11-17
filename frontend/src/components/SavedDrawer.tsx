@@ -14,7 +14,7 @@ function relativeAge(iso: string): string {
   return `${days}d ago`;
 }
 
-interface LogbookDrawerProps {
+interface SavedDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   items: SavedItem[] | null;
@@ -23,13 +23,13 @@ interface LogbookDrawerProps {
   onRetry: () => void;
 }
 
-export function LogbookDrawer({ open, onOpenChange, items, loading, error, onRetry }: LogbookDrawerProps) {
+export function SavedDrawer({ open, onOpenChange, items, loading, error, onRetry }: SavedDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="logbook-panel">
+      <SheetContent side="right" className="saved-panel">
         <SheetHeader>
-          <SheetTitle>Logbook</SheetTitle>
-          <SheetDescription className="logbook-sub">Everything saved on this device</SheetDescription>
+          <SheetTitle>Saved</SheetTitle>
+          <SheetDescription className="saved-sub">Notes and pages you kept</SheetDescription>
         </SheetHeader>
 
         <div style={{ overflowY: "auto", flex: 1, padding: "4px 12px 16px" }}>
@@ -83,3 +83,4 @@ export function LogbookDrawer({ open, onOpenChange, items, loading, error, onRet
     </Sheet>
   );
 }
+

@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import type React from "react";
 
 const PHRASES = [
-  "clear the inbox backlog",
-  "find the calm in this week",
-  "chart tomorrow’s course",
-  "skim the weekly thread",
+  "ask your notes anything",
+  "every answer cited",
+  "clear the reading backlog",
+  "find what you already saved",
 ];
 
 const PHRASE_SECONDS = 5;

@@ -1,4 +1,9 @@
-const CHIPS = ["/skim a thread", "/sketch a plan", "/sift my notes", "/sharpen a draft"];
+const CHIPS = [
+  "/summarize my saved items",
+  "/find gaps in my sources",
+  "/key claims with citations",
+  "/compare two saved pages",
+];
 
 interface CommandChipsProps {
   onInsert: (text: string) => void;

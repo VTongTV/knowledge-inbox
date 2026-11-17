@@ -1,4 +1,4 @@
-/* knowledge inbox design tokens. hex values measured from the reference video.
+/* knowledge inbox design tokens. hex values tuned for the dark ambient theme.
    shadcn semantic variables map onto the same values below. */
 
 :root {
@@ -37,6 +37,12 @@
   --head-accent-from: #e6dcae;
   --head-accent-to: #b9bff2;
   --dot-gold: #c9b88a;
+
+  /* glass surfaces for the ambient redesign */
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-hi: rgba(255, 255, 255, 0.13);
+  --glass-fill: rgba(12, 13, 19, 0.62);
+  --glass-fill-soft: rgba(16, 17, 24, 0.45);
 
   --font-sans: "Geist Variable", "Geist", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -109,3 +115,4 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
 }
+
