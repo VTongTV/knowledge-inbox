@@ -193,12 +193,12 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
 
   const drawn = useRef(false);
 
-  useFrame((state, delta) => {
+  useFrame((state) => {
     if (reducedMotion && drawn.current) return;
     if (document.hidden) return;
+    // the school is a pure function of the wall clock.
     const t = reducedMotion ? 0 : state.clock.elapsedTime;
-    const dt = reducedMotion ? 0 : Math.min(delta, 0.25);
-    school.update(t, dt);
+    school.update(t);
     drawn.current = true;
 
     const n = school.cellCount;

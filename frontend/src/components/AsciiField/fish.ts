@@ -1,6 +1,6 @@
 // the ascii fish school for the knowledge inbox background.
-// pure typescript: no dom, no renderer. the component reads the
-// cell list every frame and draws it.
+// pure typescript: no dom, no renderer. the sim is a pure function of
+// the wall clock, so the school is correct at any render cadence.
 
 /** one grid cell, in css pixels. the renderer snaps it to the 14px grid. */
 export const CELL = 14;
@@ -38,9 +38,10 @@ const PROFILES: Record<FishKind, number[][]> = {
 };
 
 const SMALL_COUNT = 8;
+
 const OMEGA = 0.055;
-const WAKE_SAMPLES = 12;
-const WAKE_SAMPLE_EVERY = 0.12;
+const WAKE_STEPS = 10;
+const WAKE_STEP_SECONDS = 0.16;
 
 export type FishKind = "large" | "medium" | "small";
 export type CellKind = "body" | "wake" | "fringe";
@@ -59,21 +60,15 @@ interface Fish {
   id: number;
   kind: FishKind;
   family: "gold" | "blue";
-  theta: number;
+  theta0: number;
   omega: number;
   rx: number;
   ry: number;
   profile: number[];
   phase: number;
+  sparklePeriod: number;
   leaderId: number;
   lag: number;
-  wakeX: number[];
-  wakeY: number[];
-  wakeT: number[];
-  wakeTimer: number;
-  sparkleSlot: number;
-  sparkleUntil: number;
-  sparkleNext: number;
 }
 
 function mulberry32(seed: number): () => number {
@@ -108,8 +103,9 @@ function mixHex(a: string, b: string, t: number): string {
 }
 
 /**
- * the fish school. owns ellipses, headings, wakes and shimmer.
- * call update(t, dt) once per frame; read cells[0..cellCount).
+ * the fish school. positions are a function of the wall clock,
+ * so any render rate paints the correct frame.
+ * call update(t) once per frame; read cells[0..cellCount).
  */
 export class School {
   /** reusable cell pool. the renderer reads index 0..cellCount. */
@@ -132,7 +128,7 @@ export class School {
     this.rand = mulberry32(seed);
     this.buildFish();
     this.buildBlurFish();
-    this.update(0, 0);
+    this.update(0);
   }
 
   resize(width: number, height: number): void {
@@ -148,6 +144,34 @@ export class School {
       f.rx *= sx;
       f.ry *= sy;
     }
+    this.update(0);
+  }
+
+  /** angle on the ellipse at time t. grows by omega per second, ccw on screen. */
+  private thetaAt(f: Fish, t: number): number {
+    return f.theta0 - f.omega * t;
+  }
+
+  /** angle for small fish: tail the leader with a fixed lag and a wobble. */
+  private leaderThetaAt(f: Fish, t: number): number {
+    if (f.leaderId < 0) return this.thetaAt(f, t);
+    const leader = this.fish.find((o) => o.id === f.leaderId);
+    if (!leader) return this.thetaAt(f, t);
+    return this.thetaAt(leader, t) + f.lag + Math.sin(t * 0.5 + f.phase) * 0.015;
+  }
+
+  /** position on the ellipse, with the radial sway when requested. */
+  private positionAt(f: Fish, t: number, sway: boolean): { x: number; y: number } {
+    const cx = this.width / 2;
+    const cy = this.height / 2;
+    const theta = this.leaderThetaAt(f, t);
+    const s = sway ? Math.sin(t * 0.6 + f.phase) * 10 : 0;
+    const vx = Math.sin(theta);
+    const vy = -Math.cos(theta);
+    return {
+      x: cx + f.rx * Math.cos(theta) + vx * s,
+      y: cy + f.ry * Math.sin(theta) + vy * s,
+    };
   }
 
   private buildFish(): void {
@@ -212,21 +236,15 @@ export class School {
       id,
       kind,
       family,
-      theta,
+      theta0: theta,
       omega: OMEGA * (0.85 + this.rand() * 0.3),
       rx: rx * jitter,
       ry: ry * jitter,
       profile: profiles[Math.floor(this.rand() * profiles.length)],
       phase: this.rand() * Math.PI * 2,
+      sparklePeriod: 2.0 + this.rand() * 1.5,
       leaderId: -1,
       lag: 0,
-      wakeX: [],
-      wakeY: [],
-      wakeT: [],
-      wakeTimer: 0,
-      sparkleSlot: -1,
-      sparkleUntil: 0,
-      sparkleNext: 1.5 + this.rand() * 1.5,
     };
   }
 
@@ -255,76 +273,25 @@ export class School {
     }
   }
 
-  /** advance the school to time t (seconds). dt is the step, clamped. */
-  update(t: number, dt: number): void {
+  /** paint the school at time t (seconds). pure in t; dt is not needed. */
+  update(t: number): void {
     this.ensurePool();
     this.cellCount = 0;
     this.blurCellCount = 0;
-    if (dt > 0.25) dt = 0.25;
 
-    for (const f of this.fish) {
-      this.stepFish(f, t, dt);
-      this.emitFish(f, t);
-    }
-    for (const f of this.blurFish) {
-      this.stepFish(f, t, dt);
-      this.emitBlurFish(f, t);
-    }
-  }
-
-  private stepFish(f: Fish, t: number, dt: number): void {
-    if (f.leaderId >= 0) {
-      const leader = this.fish.find((o) => o.id === f.leaderId);
-      if (leader) {
-        // ride the leader's wake: hold the angle lag, wobble a little.
-        f.theta = leader.theta + f.lag + Math.sin(t * 0.5 + f.phase) * 0.015;
-      }
-    }
-    f.theta -= f.omega * dt;
-    if (f.theta < -Math.PI * 2) f.theta += Math.PI * 2;
-
-    f.wakeTimer += dt;
-    if (f.wakeTimer >= WAKE_SAMPLE_EVERY) {
-      f.wakeTimer = 0;
-      const p = this.fishPosition(f, t);
-      f.wakeX.push(p.x);
-      f.wakeY.push(p.y);
-      f.wakeT.push(t);
-      if (f.wakeX.length > WAKE_SAMPLES) {
-        f.wakeX.shift();
-        f.wakeY.shift();
-        f.wakeT.shift();
-      }
-    }
-
-    if (t >= f.sparkleNext) {
-      f.sparkleSlot = Math.floor(this.rand() * this.bodyCellCount(f));
-      f.sparkleUntil = t + 0.25;
-      f.sparkleNext = t + 1.5 + this.rand() * 1.5;
-    }
+    for (const f of this.fish) this.emitFish(f, t);
+    for (const f of this.blurFish) this.emitBlurFish(f, t);
   }
 
   private bodyCellCount(f: Fish): number {
     return f.profile.reduce((sum, w) => sum + w, 0);
   }
 
-  /** the fish head position on its ellipse, with the radial sway. */
-  private fishPosition(f: Fish, t: number): { x: number; y: number } {
-    const cx = this.width / 2;
-    const cy = this.height / 2;
-    const sway = Math.sin(t * 0.6 + f.phase) * 10;
-    const vx = Math.sin(f.theta);
-    const vy = -Math.cos(f.theta);
-    return {
-      x: cx + f.rx * Math.cos(f.theta) + vx * sway,
-      y: cy + f.ry * Math.sin(f.theta) + vy * sway,
-    };
-  }
-
   private emitFish(f: Fish, t: number): void {
-    const head = this.fishPosition(f, t);
-    const vx = Math.sin(f.theta) * f.rx;
-    const vy = -Math.cos(f.theta) * f.ry;
+    const head = this.positionAt(f, t, true);
+    const theta = this.leaderThetaAt(f, t);
+    const vx = Math.sin(theta) * f.rx;
+    const vy = -Math.cos(theta) * f.ry;
     const speed = Math.hypot(vx, vy) || 1;
     // forward points along the travel direction; body rows run backwards.
     const fx = vx / speed;
@@ -337,6 +304,13 @@ export class School {
     const glyph = isGold ? GOLD_GLYPH : BLUE_GLYPH;
     const bodyTileScale = f.kind === "small" ? 0.75 : 1;
     const flex = Math.sin(t * 0.6 + f.phase) < -0.5;
+
+    // sparkle: one cell flashes lavender near the middle of each cycle.
+    const window_ = Math.floor(t / f.sparklePeriod);
+    const inWindow = (t % f.sparklePeriod) < 0.25;
+    const sparkleSlot = inWindow
+      ? Math.floor(hash01(f.id * 991 + 37, window_ * 17) * this.bodyCellCount(f))
+      : -1;
 
     let slot = 0;
     for (let row = 0; row < f.profile.length; row++) {
@@ -351,7 +325,7 @@ export class School {
         const edge = row === 0 || row === f.profile.length - 1 || col === 0 || col === width - 1;
         const jitter = 0.85 + hash01(f.id * 97 + row, Math.floor(t * 4) * 31 + col) * 0.3;
         const tileAlpha = (0.9 * jitter - (edge ? 0.1 : 0)) * bodyTileScale;
-        const sparkle = slot === f.sparkleSlot && t < f.sparkleUntil;
+        const sparkle = slot === sparkleSlot;
         this.pushCell(
           Math.round(px / CELL) * CELL,
           Math.round(py / CELL) * CELL,
@@ -394,7 +368,7 @@ export class School {
       for (let col = 0; col < width; col++) {
         const px = head.x - fx * back + lx * ((col - center) + wag) * CELL;
         const py = head.y - fy * back + ly * ((col - center) + wag) * CELL;
-        const sparkle = slot === f.sparkleSlot && t < f.sparkleUntil;
+        const sparkle = slot === sparkleSlot;
         this.pushCell(
           Math.round(px / CELL) * CELL,
           Math.round(py / CELL) * CELL,
@@ -414,31 +388,32 @@ export class School {
 
   private emitWake(f: Fish, t: number): void {
     if (f.kind === "small") return;
-    for (let i = 1; i < f.wakeX.length; i++) {
-      const age = t - f.wakeT[i];
-      if (age > 1.2) continue;
-      const trail = i / f.wakeX.length;
+    for (let i = 1; i <= WAKE_STEPS; i++) {
+      const age = i * WAKE_STEP_SECONDS;
+      const p = this.positionAt(f, t - age, true);
+      const trail = i / WAKE_STEPS;
       const prob = 0.7 * (1 - trail);
       if (hash01(f.id * 313 + i, Math.floor(t * 4)) >= prob) continue;
-      const jx = (hash01(f.id * 417 + i, Math.floor(t * 2)) - 0.5) * 2 * CELL;
-      const jy = (hash01(f.id * 521 + i, Math.floor(t * 2) + 7) - 0.5) * 2 * CELL;
+      const jx = (hash01(f.id * 417 + i, Math.floor(t * 2)) - 0.5) * 1.6 * CELL;
+      const jy = (hash01(f.id * 521 + i, Math.floor(t * 2) + 7) - 0.5) * 1.6 * CELL;
       this.pushCell(
-        Math.round((f.wakeX[i] + jx) / CELL) * CELL,
-        Math.round((f.wakeY[i] + jy) / CELL) * CELL,
+        Math.round((p.x + jx) / CELL) * CELL,
+        Math.round((p.y + jy) / CELL) * CELL,
         this.pickWakeGlyph(f.id * 611 + i, t),
         FRINGE_COLOR,
         "",
         0,
-        0.6 * (1 - age / 1.2),
+        0.6 * (1 - trail),
         "wake",
       );
     }
   }
 
   private emitBlurFish(f: Fish, t: number): void {
-    const head = this.fishPosition(f, t);
-    const vx = Math.sin(f.theta) * f.rx;
-    const vy = -Math.cos(f.theta) * f.ry;
+    const head = this.positionAt(f, t, true);
+    const theta = this.thetaAt(f, t);
+    const vx = Math.sin(theta) * f.rx;
+    const vy = -Math.cos(theta) * f.ry;
     const speed = Math.hypot(vx, vy) || 1;
     const fx = vx / speed;
     const fy = vy / speed;
@@ -489,7 +464,6 @@ export class School {
       c.tileColor = tileAlpha > 0 ? mixHex("#0a0b10", tileColor, Math.min(1, tileAlpha)) : "";
     }
     this.cellCount++;
-
   }
 
   private pushBlurCell(x: number, y: number, color: string): void {
@@ -514,5 +488,3 @@ export class School {
     return WAKE_GLYPHS[Math.floor(hash01(seed, Math.floor(t * 4)) * WAKE_GLYPHS.length)];
   }
 }
-
-
