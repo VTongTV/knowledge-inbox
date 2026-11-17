@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]*")
 _SKIP_TAGS = frozenset({"script", "style"})
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
+_USER_AGENT = "KnowledgeInbox/0.1 (server-side page fetcher)"
 
 
 class FetchError(ValueError):
@@ -107,7 +108,7 @@ def fetch_url(
         )
     try:
         with httpx.Client(
-            transport=transport, follow_redirects=True, timeout=timeout
+            transport=transport, follow_redirects=True, timeout=timeout, headers={"User-Agent": _USER_AGENT}
         ) as client:
             response = client.get(url)
     except httpx.HTTPError as exc:
