@@ -13,22 +13,20 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: var(--page-bg);
+  background: var(--app-bg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---- the app frame: 1228 x 692, inset 27 / 25, centred ---- */
+/* ---- the app frame: fills the viewport ---- */
 
 .app-frame {
   position: relative;
-  width: min(1228px, calc(100vw - 52px));
-  height: min(692px, calc(100vh - 50px));
-  border-radius: var(--radius-frame);
+  width: 100vw;
+  height: 100dvh;
+  border-radius: 0;
   overflow: hidden;
   background: var(--app-bg);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
 }
 
 .app-grid {
@@ -590,7 +588,6 @@ body {
 }
 
 @media (max-width: 700px) {
-  .app-frame { width: 100vw; height: 100vh; border-radius: 0; border: none }
   .greeting { margin-top: 150px }
 }
 
