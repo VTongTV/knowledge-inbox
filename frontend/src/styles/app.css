@@ -60,8 +60,10 @@ body {
   top: 0;
   bottom: 0;
   width: 74px;
-  background: var(--sidebar-bg);
-  border-right: 1px solid #0b0c0f;
+  background: rgba(10, 11, 17, 0.55);
+  border-right: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
   z-index: 4;
   transition: width 0.2s ease, opacity 0.2s ease;
   overflow: hidden;
@@ -76,10 +78,12 @@ body {
   z-index: 6;
   width: 18px;
   height: 64px;
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--glass-border);
   border-left: none;
   border-radius: 0 8px 8px 0;
-  background: var(--sidebar-bg);
+  background: rgba(10, 11, 17, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   color: var(--text-greeting);
   display: grid;
   place-items: center;
@@ -102,8 +106,13 @@ body {
   transition: background 0.15s ease;
 }
 
-.nav-item:hover { background: var(--raised-bg) }
-.nav-item.active { background: var(--active-bg) }
+.nav-item:hover { background: rgba(255, 255, 255, 0.06) }
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px var(--glass-border);
+}
 
 .active-indicator {
   position: absolute;
@@ -144,17 +153,22 @@ body {
   height: 36px;
   padding: 0 10px;
   border-radius: var(--radius-tile);
-  border: 1px solid var(--border-soft);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-fill-soft);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
   color: #fdfeff;
   font-family: var(--font-sans);
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.logbook-button:hover { background: rgba(255, 255, 255, 0.05) }
+.logbook-button:hover { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.14) }
 
 .kbd-chip {
   background: var(--active-bg);
@@ -241,18 +255,31 @@ body {
 /* ---- composer ---- */
 
 .composer {
+  position: relative;
   margin-top: 22px;
   width: 606px;
   max-width: calc(100% - 0px);
   min-height: 123px;
-  background: var(--composer-bg);
-  border: 1px solid var(--border-soft);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-composer);
   padding: 18px 20px 13px;
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 0 0 3px rgba(255, 255, 255, 0.012),
-    0 8px 40px rgba(0, 0, 0, 0.5);
+    inset 0 1px 0 var(--glass-hi),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+    0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.composer::before {
+  /* a faint diagonal sheen, the way real frosted glass catches light */
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.015) 34%, transparent 52%);
+  pointer-events: none;
 }
 
 .composer-textarea {
@@ -288,7 +315,7 @@ body {
   transition: background 0.15s ease;
 }
 
-.icon-btn:hover { background: var(--raised-bg) }
+.icon-btn:hover { background: rgba(255, 255, 255, 0.07) }
 .icon-btn[aria-pressed="true"] { color: var(--gold) }
 
 .model-pill {
@@ -298,17 +325,20 @@ body {
   height: 40px;
   padding: 0 12px;
   border-radius: var(--radius-pill);
-  background: var(--raised-bg);
-  border: 1px solid var(--border-faint);
+  background: var(--glass-fill-soft);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: var(--text-btn);
   font-family: var(--font-sans);
   font-size: 15.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.model-pill:hover { border-color: var(--border-soft) }
+.model-pill:hover { border-color: rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.06) }
 
 .hint {
   margin-left: auto;
@@ -348,16 +378,18 @@ body {
   height: 34px;
   padding: 0 17px;
   border-radius: 999px;
-  background: var(--app-bg);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--glass-fill-soft);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-chip);
   font-family: var(--font-mono);
   font-size: 14px;
-  color: var(--text-chip);
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.chip:hover { border-color: var(--border-soft); color: var(--text-hi) }
+.chip:hover { border-color: rgba(255, 255, 255, 0.16); color: var(--text-hi) }
 
 /* ---- footnote ---- */
 
@@ -393,8 +425,8 @@ body {
 .msg-user {
   align-self: flex-end;
   max-width: 78%;
-  background: #18191c;
-  border: 1px solid var(--border-soft);
+  background: rgba(24, 25, 28, 0.62);
+  border: 1px solid var(--glass-border);
   border-radius: 14px 14px 4px 14px;
   padding: 8px 14px;
   font-size: 14.5px;
@@ -404,9 +436,12 @@ body {
 
 .msg-bot {
   align-self: stretch;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-soft);
+  background: var(--glass-fill-soft);
+  border: 1px solid var(--glass-border);
   border-radius: 14px 14px 14px 4px;
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   padding: 12px 14px;
   font-size: 13.5px;
   line-height: 1.55;
@@ -468,8 +503,10 @@ body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
-  background: #18191c;
-  border: 1px solid var(--border-soft);
+  background: rgba(24, 25, 28, 0.7);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-radius: 10px;
   padding: 8px 14px;
   font-family: var(--font-mono);
@@ -479,7 +516,7 @@ body {
 
 /* ---- logbook drawer ---- */
 
-.logbook-panel { width: 360px !important; background: var(--sidebar-bg) !important; border-left: 1px solid var(--border-soft) !important; color: var(--text-hi) !important }
+.logbook-panel { width: 360px !important; background: rgba(10, 11, 17, 0.72) !important; border-left: 1px solid var(--glass-border) !important; backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); color: var(--text-hi) !important }
 
 .logbook-sub { color: var(--text-hint); font-size: 12.5px }
 
@@ -491,7 +528,7 @@ body {
   border-radius: 10px;
 }
 
-.item-row:hover { background: var(--raised-bg) }
+.item-row:hover { background: rgba(255, 255, 255, 0.05) }
 
 .item-icon {
   flex: 0 0 auto;
@@ -561,8 +598,8 @@ body {
 
 .ingest-input, .ingest-url {
   width: 100%;
-  background: var(--app-bg);
-  border: 1px solid var(--border-soft);
+  background: rgba(8, 9, 12, 0.55);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-pill);
   padding: 10px 12px;
   color: var(--text-hi);
@@ -606,10 +643,14 @@ body {
 .ingest-popover {
   width: 260px;
   padding: 12px;
-  background: var(--raised-bg) !important;
-  border: 1px solid var(--border-soft) !important;
+  background: rgba(12, 13, 20, 0.82) !important;
+  border: 1px solid var(--glass-border) !important;
   border-radius: var(--radius-tile) !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 40px rgba(0, 0, 0, 0.5) !important;
 }
 
 .ingest-kind button { display: flex; align-items: center; gap: 6px; justify-content: center }
@@ -642,9 +683,11 @@ body {
 }
 
 .model-menu {
-  background: var(--raised-bg) !important;
-  border: 1px solid var(--border-soft) !important;
+  background: rgba(12, 13, 20, 0.88) !important;
+  border: 1px solid var(--glass-border) !important;
   border-radius: var(--radius-tile) !important;
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
   min-width: 140px !important;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
 }
@@ -667,3 +710,4 @@ body {
   color: var(--text-hint);
   margin-bottom: 4px;
 }
+

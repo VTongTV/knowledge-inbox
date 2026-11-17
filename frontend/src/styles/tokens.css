@@ -10,7 +10,7 @@
   --raised-bg: #101116;
   --active-bg: #18191c;
   --send-bg: #18191e;
-  --grid-line: #0d0e13;
+  --grid-line: rgba(255, 255, 255, 0.032);
 
   /* borders */
   --border-faint: #121318;
@@ -37,6 +37,13 @@
   --head-accent-from: #e6dcae;
   --head-accent-to: #b9bff2;
   --dot-gold: #c9b88a;
+
+  /* glassmorphism surfaces: translucent fill over the living backdrop */
+  --glass-fill: rgba(13, 14, 21, 0.52);
+  --glass-fill-soft: rgba(16, 17, 26, 0.42);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-hi: rgba(255, 255, 255, 0.14);
+  --glass-blur: 16px;
 
   --font-sans: "Geist Variable", "Geist", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
