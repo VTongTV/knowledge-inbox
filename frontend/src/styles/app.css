@@ -205,6 +205,12 @@ body {
   animation: breathe 3s ease-in-out infinite;
 }
 
+.greeting-time {
+  margin-left: 4px;
+  color: var(--text-hint);
+  font-variant-numeric: tabular-nums;
+}
+
 @keyframes breathe {
   0%, 100% { opacity: 0.45 }
   50% { opacity: 1 }
