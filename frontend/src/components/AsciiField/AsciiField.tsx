@@ -4,7 +4,8 @@ import * as THREE from "three";
 
 import { School, CELL, BODY_GLYPHS, WAKE_GLYPHS } from "./fish";
 
-const MAX_CELLS = 2400;
+const MAX_CELLS = 3000;
+const MAX_BLUR_CELLS = 1500;
 const ATLAS_CHARS = [...BODY_GLYPHS, ...WAKE_GLYPHS];
 const ATLAS_CELL = 48;
 
@@ -38,14 +39,19 @@ function buildSprite(): THREE.CanvasTexture {
   canvas.height = 64;
   const ctx = canvas.getContext("2d");
   if (ctx) {
-    const grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 32);
-    grad.addColorStop(0, "rgba(255,255,255,1)");
-    grad.addColorStop(0.55, "rgba(255,255,255,0.85)");
-    grad.addColorStop(1, "rgba(255,255,255,0)");
+    const grad = ctx.createRadialGradient(32, 32, 4, 32, 32, 30);
+    grad.addColorStop(0, "rgba(255,255,255,1.0)");
+    grad.addColorStop(0.35, "rgba(255,255,255,0.85)");
+    grad.addColorStop(0.7, "rgba(255,255,255,0.35)");
+    grad.addColorStop(1.0, "rgba(255,255,255,0.0)");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 64, 64);
   }
-  return new THREE.CanvasTexture(canvas);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
 }
 
 const tileVertex = `
@@ -298,18 +304,18 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
 function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
   const sprite = useMemo(() => buildSprite(), []);
   const mesh = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(CELL * 2.8, CELL * 2.8);
+    const geo = new THREE.PlaneGeometry(CELL * 1.55, CELL * 1.55);
     const mat = new THREE.MeshBasicMaterial({
       map: sprite,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.85,
       depthWrite: false,
       depthTest: false,
     });
-    const instanced = new THREE.InstancedMesh(geo, mat, MAX_CELLS);
+    const instanced = new THREE.InstancedMesh(geo, mat, MAX_BLUR_CELLS);
     instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instanced.frustumCulled = false;
-    for (let i = 0; i < MAX_CELLS; i++) instanced.setColorAt(i, new THREE.Color("#3c4156"));
+    for (let i = 0; i < MAX_BLUR_CELLS; i++) instanced.setColorAt(i, new THREE.Color("#384058"));
     return instanced;
   }, [sprite]);
 
@@ -319,9 +325,11 @@ function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
   }), []);
   const drawn = useRef(false);
 
-  useFrame(() => {
+  useFrame((state) => {
     if (reducedMotion && drawn.current) return;
     if (document.hidden) return;
+    const t = reducedMotion ? 0 : state.clock.elapsedTime;
+    school.update(t);
     drawn.current = true;
 
     const n = school.blurCellCount;
@@ -329,8 +337,8 @@ function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
     const color = scratch.color;
     for (let i = 0; i < n; i++) {
       const cell = school.blurCells[i];
-      const x = cell.x - width / 2;
-      const y = -cell.y + height / 2;
+      const x = cell.x + CELL / 2 - width / 2;
+      const y = -(cell.y + CELL / 2) + height / 2;
       dummy.makeTranslation(x, y, 0);
       mesh.setMatrixAt(i, dummy);
       mesh.setColorAt(i, color.set(cell.tileColor));
