@@ -114,6 +114,34 @@ void main() {
 }
 `;
 
+const blurVertex = `
+attribute vec3 aColor;
+attribute float aAlpha;
+varying vec2 vUv;
+varying vec3 vColor;
+varying float vAlpha;
+void main() {
+  vUv = uv;
+  vColor = aColor;
+  vAlpha = aAlpha;
+  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+}
+`;
+
+const blurFragment = `
+uniform sampler2D uSprite;
+varying vec2 vUv;
+varying vec3 vColor;
+varying float vAlpha;
+void main() {
+  if (vAlpha < 0.01) discard;
+  vec4 tex = texture2D(uSprite, vUv);
+  float alpha = tex.a * vAlpha;
+  if (alpha < 0.01) discard;
+  gl_FragColor = vec4(vColor, alpha);
+}
+`;
+
 interface FieldProps {
   layer: "sharp" | "blur";
 }
@@ -140,7 +168,22 @@ export function AsciiField({ layer }: FieldProps) {
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
+
+    const onPointerMove = (e: PointerEvent) => {
+      const rect = el.getBoundingClientRect();
+      schoolRef.current?.setMouse(e.clientX - rect.left, e.clientY - rect.top);
+    };
+    const onPointerLeave = () => {
+      schoolRef.current?.clearMouse();
+    };
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointerleave", onPointerLeave);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerleave", onPointerLeave);
+    };
   }, []);
 
   return (
@@ -269,7 +312,7 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
       if (cell.tileColor) {
         tileColor.set(cell.tileColor);
         tileColorAttr.setXYZ(i, tileColor.r, tileColor.g, tileColor.b);
-        tileAlphaAttr.setX(i, 1.0);
+        tileAlphaAttr.setX(i, cell.alpha);
       } else {
         tileAlphaAttr.setX(i, 0.0);
       }
@@ -304,18 +347,27 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
 function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
   const sprite = useMemo(() => buildSprite(), []);
   const mesh = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(CELL * 1.55, CELL * 1.55);
-    const mat = new THREE.MeshBasicMaterial({
-      map: sprite,
+    const geo = new THREE.PlaneGeometry(CELL * 1.6, CELL * 1.6);
+    const colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_BLUR_CELLS * 3), 3);
+    const alphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_BLUR_CELLS), 1);
+    colorAttr.setUsage(THREE.DynamicDrawUsage);
+    alphaAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute("aColor", colorAttr);
+    geo.setAttribute("aAlpha", alphaAttr);
+
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uSprite: { value: sprite },
+      },
+      vertexShader: blurVertex,
+      fragmentShader: blurFragment,
       transparent: true,
-      opacity: 0.85,
       depthWrite: false,
       depthTest: false,
     });
     const instanced = new THREE.InstancedMesh(geo, mat, MAX_BLUR_CELLS);
     instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instanced.frustumCulled = false;
-    for (let i = 0; i < MAX_BLUR_CELLS; i++) instanced.setColorAt(i, new THREE.Color("#384058"));
     return instanced;
   }, [sprite]);
 
@@ -335,17 +387,25 @@ function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
     const n = school.blurCellCount;
     const dummy = scratch.matrix;
     const color = scratch.color;
+    const colorAttr = mesh.geometry.getAttribute("aColor") as THREE.InstancedBufferAttribute;
+    const alphaAttr = mesh.geometry.getAttribute("aAlpha") as THREE.InstancedBufferAttribute;
+
     for (let i = 0; i < n; i++) {
       const cell = school.blurCells[i];
       const x = cell.x + CELL / 2 - width / 2;
       const y = -(cell.y + CELL / 2) + height / 2;
-      dummy.makeTranslation(x, y, 0);
+      const scale = 0.65 + 0.35 * Math.min(1.0, cell.alpha / 0.85);
+      dummy.makeScale(scale, scale, 1);
+      dummy.setPosition(x, y, 0);
       mesh.setMatrixAt(i, dummy);
-      mesh.setColorAt(i, color.set(cell.tileColor));
+      color.set(cell.tileColor);
+      colorAttr.setXYZ(i, color.r, color.g, color.b);
+      alphaAttr.setX(i, cell.alpha);
     }
     mesh.count = n;
     mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    colorAttr.needsUpdate = true;
+    alphaAttr.needsUpdate = true;
   });
 
   return <primitive object={mesh} />;

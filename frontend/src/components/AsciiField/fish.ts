@@ -18,9 +18,9 @@ const SPARKLE_GLYPH = "#dcc4ff";
 
 const WAKE_GLYPH_COLOR = "#8c90a4";
 
-const OMEGA = 0.082;
-const WAKE_STEPS = 14;
-const WAKE_STEP_SECONDS = 0.12;
+const OMEGA = 0.164;
+const WAKE_STEPS = 16;
+const WAKE_STEP_SECONDS = 0.07;
 
 export type FishKind = "large" | "medium" | "small";
 export type CellKind = "body" | "wake" | "fringe";
@@ -85,6 +85,12 @@ export class School {
   private fish: Fish[] = [];
   private blurFish: Fish[] = [];
   private rand: () => number;
+  private targetMouseX = -9999;
+  private targetMouseY = -9999;
+  private mouseX = -9999;
+  private mouseY = -9999;
+  private mouseStrength = 0;
+  private mouseActive = false;
 
   constructor(width: number, height: number, seed = 42) {
     this.width = width;
@@ -93,6 +99,18 @@ export class School {
     this.buildFish();
     this.buildBlurFish();
     this.update(0);
+  }
+
+  /** record the mouse position in pixel coordinates. */
+  setMouse(x: number, y: number): void {
+    this.targetMouseX = x;
+    this.targetMouseY = y;
+    this.mouseActive = true;
+  }
+
+  /** clear the active mouse state. */
+  clearMouse(): void {
+    this.mouseActive = false;
   }
 
   resize(width: number, height: number): void {
@@ -111,6 +129,22 @@ export class School {
     this.update(0);
   }
 
+  /** smoothly follow the mouse target coordinate. */
+  private updateMouse(): void {
+    if (this.mouseActive) {
+      if (this.mouseX < -9000) {
+        this.mouseX = this.targetMouseX;
+        this.mouseY = this.targetMouseY;
+      } else {
+        this.mouseX += (this.targetMouseX - this.mouseX) * 0.3;
+        this.mouseY += (this.targetMouseY - this.mouseY) * 0.3;
+      }
+      this.mouseStrength = Math.min(1.0, this.mouseStrength + 0.12);
+    } else {
+      this.mouseStrength = Math.max(0.0, this.mouseStrength - 0.08);
+    }
+  }
+
   /** angle on the ellipse at time t. grows by omega per second. */
   private thetaAt(f: Fish, t: number): number {
     return f.theta0 - f.omega * t;
@@ -121,24 +155,43 @@ export class School {
     if (f.leaderId < 0) return this.thetaAt(f, t);
     const leader = this.fish.find((o) => o.id === f.leaderId);
     if (!leader) return this.thetaAt(f, t);
-    return this.thetaAt(leader, t) + f.lag + Math.sin(t * 0.8 + f.phase) * 0.02;
+    return this.thetaAt(leader, t) + f.lag + Math.sin(t * 1.6 + f.phase) * 0.02;
   }
 
-  /** position on the ellipse with radial sway and lateral drift. */
-  private positionAt(f: Fish, t: number, sway: boolean): { x: number; y: number } {
+  /** position on the ellipse with radial sway and mouse repulsion. */
+  private positionAt(
+    f: Fish,
+    t: number,
+    sway: boolean,
+  ): { x: number; y: number; agitation: number } {
     const cx = this.width / 2;
     const cy = this.height / 2;
     const theta = this.leaderThetaAt(f, t);
-    const s = sway ? Math.sin(t * 1.4 + f.phase) * 16 : 0;
+    const s = sway ? Math.sin(t * 2.6 + f.phase) * 16 : 0;
     const vx = Math.sin(theta);
     const vy = -Math.cos(theta);
     const lx = -vy;
     const ly = vx;
-    const lat = (f.lateralOffset ? f.lateralOffset * CELL : 0) + (sway ? Math.cos(t * 1.0 + f.phase) * 9 : 0);
-    return {
-      x: cx + f.rx * Math.cos(theta) + vx * s + lx * lat,
-      y: cy + f.ry * Math.sin(theta) + vy * s + ly * lat,
-    };
+    const lat = (f.lateralOffset ? f.lateralOffset * CELL : 0) + (sway ? Math.cos(t * 1.8 + f.phase) * 9 : 0);
+
+    let x = cx + f.rx * Math.cos(theta) + vx * s + lx * lat;
+    let y = cy + f.ry * Math.sin(theta) + vy * s + ly * lat;
+    let agitation = 0;
+
+    if (this.mouseStrength > 0.01) {
+      const mdx = x - this.mouseX;
+      const mdy = y - this.mouseY;
+      const dist = Math.hypot(mdx, mdy);
+      if (dist < 180 && dist > 1) {
+        const prox = (1 - dist / 180) * this.mouseStrength;
+        const push = prox * prox * 55;
+        x += (mdx / dist) * push;
+        y += (mdy / dist) * push;
+        agitation = prox;
+      }
+    }
+
+    return { x, y, agitation };
   }
 
   private buildFish(): void {
@@ -209,7 +262,7 @@ export class School {
       ry: ry * jitter,
       scale,
       phase: this.rand() * Math.PI * 2,
-      sparklePeriod: 1.4 + this.rand() * 1.0,
+      sparklePeriod: 0.9 + this.rand() * 0.7,
       leaderId: -1,
       lag: 0,
       lateralOffset: 0,
@@ -243,6 +296,7 @@ export class School {
 
   /** paint the school at time t in seconds. */
   update(t: number): void {
+    this.updateMouse();
     this.ensurePool();
     this.cellCount = 0;
     this.blurCellCount = 0;
@@ -251,34 +305,42 @@ export class School {
     for (const f of this.blurFish) this.emitBlurFish(f, t);
   }
 
-  /** verify if local coordinates (u, v) fall inside the knowledge inbox body. */
-  private isBodyCell(u: number, v: number, flap: number, wag: number): boolean {
-    if (u >= 1.0 && u <= 1.8 && v >= 0.4 && v <= 1.3) {
-      return true;
+  /** calculate the smooth body coverage from the envelope distance. */
+  private bodyCoverage(u: number, v: number, flap: number, wag: number): number {
+    if (u >= 1.0 && u <= 1.8) {
+      if (v < 0.3 || v > 1.4) return 0.0;
+      const margin = Math.min(v - 0.3, 1.4 - v);
+      return Math.min(1.0, Math.max(0.0, (margin + 0.2) / 0.4));
     }
-    if (u >= -2.2 && u < 1.0) {
-      if (v <= 0.8) return true;
-      if (u >= 0.0) {
-        return v <= 0.8 + (1.0 - u) * 1.5;
-      }
+    if (u >= 0.0 && u < 1.0) {
+      if (v <= 0.8) return 1.0;
+      const targetW = 0.8 + (1.0 - u) * 1.5;
+      const margin = targetW - v;
+      return Math.min(1.0, Math.max(0.0, (margin + 0.3) / 0.6));
+    }
+    if (u >= -2.2 && u < 0.0) {
+      if (v <= 0.8) return 1.0;
       const taper = Math.pow((u + 2.2) / 2.2, 0.85);
-      return v <= 0.8 + 2.2 * (1.0 + flap * 0.35) * taper;
+      const targetW = 0.8 + 2.2 * (1.0 + flap * 0.35) * taper;
+      const margin = targetW - v;
+      return Math.min(1.0, Math.max(0.0, (margin + 0.3) / 0.6));
     }
     if (u >= -3.5 && u < -2.2) {
-      return Math.abs(v - wag) <= 0.55;
+      const margin = 0.55 - Math.abs(v - wag);
+      return Math.min(1.0, Math.max(0.0, (margin + 0.25) / 0.5));
     }
-    return false;
+    return 0.0;
   }
 
   /** verify if local coordinates (u, v) fall inside the fringe wake. */
   private isFringeCell(u: number, v: number, fishId: number, dx: number, dy: number, t: number): boolean {
     if (v <= 1.2 || v >= 3.2 || u <= -2.0 || u >= 0.8) return false;
-    return hash01(fishId * 57 + dx * 13 + dy, Math.floor(t * 3.5)) < 0.32;
+    return hash01(fishId * 57 + dx * 13 + dy, Math.floor(t * 5.0)) < 0.32;
   }
 
   /** paint one fish at time t. */
   private emitFish(f: Fish, t: number): void {
-    const center = this.positionAt(f, t, true);
+    const pos = this.positionAt(f, t, true);
     const theta = this.leaderThetaAt(f, t);
 
     const vx = Math.sin(theta) * f.rx;
@@ -294,10 +356,11 @@ export class School {
     const tilePalette = isGold ? GOLD_TILES : BLUE_TILES;
     const glyphColor = isGold ? GOLD_GLYPH : BLUE_GLYPH;
 
-    const wag = Math.sin(t * 3.4 + f.phase) * 0.42;
+    const wagSpeed = 6.2 * (1 + pos.agitation * 0.8);
+    const wag = Math.sin(t * wagSpeed + f.phase) * (0.42 + pos.agitation * 0.2);
 
     const windowIndex = Math.floor(t / f.sparklePeriod);
-    const inWindow = (t % f.sparklePeriod) < 0.32;
+    const inWindow = (t % f.sparklePeriod) < 0.32 || pos.agitation > 0.4;
     const sparkleSlot1 = inWindow
       ? Math.floor(hash01(f.id * 991 + 37, windowIndex * 17) * 24)
       : -1;
@@ -305,8 +368,8 @@ export class School {
       ? Math.floor(hash01(f.id * 533 + 71, windowIndex * 23) * 24)
       : -1;
 
-    const headGx = Math.round(center.x / CELL);
-    const headGy = Math.round(center.y / CELL);
+    const headGx = Math.round(pos.x / CELL);
+    const headGy = Math.round(pos.y / CELL);
 
     const box = Math.max(3, Math.ceil(5.5 * s));
     let slot = 0;
@@ -321,10 +384,12 @@ export class School {
         const gy = headGy + dy;
         const key = `${gx},${gy}`;
 
-        const wingPhase = t * 2.6 + f.phase - u * 0.35;
-        const flap = Math.sin(wingPhase);
+        const flapSpeed = 4.8 * (1 + pos.agitation * 0.7);
+        const wingPhase = t * flapSpeed + f.phase - u * 0.4;
+        const flap = Math.sin(wingPhase) * (1 + pos.agitation * 0.5);
 
-        if (this.isBodyCell(u, v, flap, wag)) {
+        const cov = this.bodyCoverage(u, v, flap, wag);
+        if (cov >= 0.2) {
           occupied.add(key);
           const sparkle = slot === sparkleSlot1 || slot === sparkleSlot2;
           const nuance = tilePalette[Math.floor(hash01(f.id * 89 + slot, 31) * tilePalette.length)];
@@ -337,7 +402,7 @@ export class School {
             this.pickGlyph(f.id * 131 + slot, t),
             glyph,
             tile,
-            1.0,
+            cov,
             "body",
           );
           slot++;
@@ -381,7 +446,7 @@ export class School {
       const pfy = pvy / pSpeed;
 
       const trail = i / WAKE_STEPS;
-      const serpentine = Math.sin(t * 3.6 + i * 0.5) * (trail * 0.6 * CELL);
+      const serpentine = Math.sin(t * 6.8 + i * 0.5) * (trail * 0.6 * CELL);
       const tailX = past.x - pfx * (2.8 * s * CELL) + lx * serpentine;
       const tailY = past.y - pfy * (2.8 * s * CELL) + ly * serpentine;
       const wgx = Math.round(tailX / CELL);
@@ -405,7 +470,7 @@ export class School {
 
   /** paint one out-of-focus background fish at time t. */
   private emitBlurFish(f: Fish, t: number): void {
-    const center = this.positionAt(f, t, true);
+    const pos = this.positionAt(f, t, true);
     const theta = this.thetaAt(f, t);
     const vx = Math.sin(theta) * f.rx;
     const vy = -Math.cos(theta) * f.ry;
@@ -416,26 +481,29 @@ export class School {
     const ly = fx;
 
     const s = f.scale;
-    const flap = Math.sin(t * 2.5 + f.phase);
-    const wag = Math.sin(t * 3.3 + f.phase) * 0.35;
+    const flapSpeed = 4.6 * (1 + pos.agitation * 0.7);
+    const flap = Math.sin(t * flapSpeed + f.phase) * (1 + pos.agitation * 0.4);
+    const wagSpeed = 6.0 * (1 + pos.agitation * 0.8);
+    const wag = Math.sin(t * wagSpeed + f.phase) * (0.35 + pos.agitation * 0.2);
 
     const isGold = f.family === "gold";
     const baseColor = isGold ? "#3a3226" : "#2d354a";
     const spineColor = isGold ? "#4e4333" : "#3d4766";
 
     const box = Math.max(3, Math.ceil(5.5 * s));
-    const headGx = Math.round(center.x / CELL);
-    const headGy = Math.round(center.y / CELL);
+    const headGx = Math.round(pos.x / CELL);
+    const headGy = Math.round(pos.y / CELL);
 
     for (let dy = -box; dy <= box; dy++) {
       for (let dx = -box; dx <= box; dx++) {
         const u = (dx * fx + dy * fy) / s;
         const v = Math.abs(dx * lx + dy * ly) / s;
-        if (this.isBodyCell(u, v, flap, wag)) {
+        const cov = this.bodyCoverage(u, v, flap, wag);
+        if (cov >= 0.15) {
           const px = (headGx + dx) * CELL;
           const py = (headGy + dy) * CELL;
           const color = v <= 0.8 ? spineColor : baseColor;
-          this.pushBlurCell(px, py, color);
+          this.pushBlurCell(px, py, color, cov * 0.85);
         }
       }
     }
@@ -462,7 +530,7 @@ export class School {
     this.cellCount++;
   }
 
-  private pushBlurCell(x: number, y: number, color: string): void {
+  private pushBlurCell(x: number, y: number, color: string, alpha: number): void {
     if (this.blurCellCount >= this.blurCells.length) return;
     const c = this.blurCells[this.blurCellCount];
     c.x = x;
@@ -470,20 +538,20 @@ export class School {
     c.glyph = " ";
     c.glyphColor = "#000000";
     c.tileColor = color;
-    c.alpha = 0.65;
+    c.alpha = alpha;
     c.kind = "body";
     this.blurCellCount++;
   }
 
-  /** pick a body glyph that updates at five hertz. */
+  /** pick a body glyph that updates at eight hertz. */
   private pickGlyph(seed: number, t: number): string {
-    const hold = hash01(seed + 7, Math.floor(t * 2.0)) < 0.35;
-    const step = hold ? Math.floor(t * 2.0) : Math.floor(t * 5.0);
+    const hold = hash01(seed + 7, Math.floor(t * 3.0)) < 0.35;
+    const step = hold ? Math.floor(t * 3.0) : Math.floor(t * 8.0);
     return BODY_GLYPHS[Math.floor(hash01(seed, step) * BODY_GLYPHS.length)];
   }
 
   /** pick a wake glyph from the table. */
   private pickWakeGlyph(seed: number, t: number): string {
-    return WAKE_GLYPHS[Math.floor(hash01(seed, Math.floor(t * 3)) * WAKE_GLYPHS.length)];
+    return WAKE_GLYPHS[Math.floor(hash01(seed, Math.floor(t * 5)) * WAKE_GLYPHS.length)];
   }
 }
