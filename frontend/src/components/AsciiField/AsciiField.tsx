@@ -74,7 +74,6 @@ varying vec3 vTileColor;
 varying float vTileAlpha;
 void main() {
   if (vTileAlpha < 0.01) discard;
-  // rounded rectangle on 14px quad: 12.6px tile, 2.0px corner radius
   vec2 p = abs(vUv - 0.5) * 14.0;
   vec2 b = vec2(6.3, 6.3) - 2.0;
   vec2 q = p - b;
@@ -143,10 +142,10 @@ void main() {
 `;
 
 interface FieldProps {
-  layer: "sharp" | "blur";
+  layer?: "all" | "sharp" | "blur";
 }
 
-export function AsciiField({ layer }: FieldProps) {
+export function AsciiField({ layer = "all" }: FieldProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 1228, height: 692 });
   const [reducedMotion] = useState(
@@ -192,27 +191,32 @@ export function AsciiField({ layer }: FieldProps) {
         orthographic
         camera={{ left: -size.width / 2, right: size.width / 2, top: size.height / 2, bottom: -size.height / 2, near: -10, far: 10 }}
         dpr={[1, 2]}
-        gl={{ alpha: true, antialias: true, powerPreference: "low-power" }}
+        gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
         style={{ background: "transparent", pointerEvents: "none" }}
       >
-        {layer === "sharp" ? (
-          <SharpFish school={schoolRef.current} width={size.width} height={size.height} reducedMotion={reducedMotion} />
-        ) : (
-          <BlurFish school={schoolRef.current} width={size.width} height={size.height} reducedMotion={reducedMotion} />
-        )}
+        <SchoolScene
+          school={schoolRef.current}
+          width={size.width}
+          height={size.height}
+          reducedMotion={reducedMotion}
+          showBlur={layer === "all" || layer === "blur"}
+          showSharp={layer === "all" || layer === "sharp"}
+        />
       </Canvas>
     </div>
   );
 }
 
-interface LayerProps {
+interface SceneProps {
   school: School;
   width: number;
   height: number;
   reducedMotion: boolean;
+  showBlur: boolean;
+  showSharp: boolean;
 }
 
-function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
+function SchoolScene({ school, width, height, reducedMotion, showBlur, showSharp }: SceneProps) {
   const [atlasTick, setAtlasTick] = useState(0);
   const atlas = useMemo(() => buildAtlas(), [atlasTick]);
 
@@ -225,6 +229,31 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
       alive = false;
     };
   }, []);
+
+  const sprite = useMemo(() => buildSprite(), []);
+
+  const blurMesh = useMemo(() => {
+    const geo = new THREE.PlaneGeometry(CELL * 1.6, CELL * 1.6);
+    const colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_BLUR_CELLS * 3), 3);
+    const alphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_BLUR_CELLS), 1);
+    colorAttr.setUsage(THREE.DynamicDrawUsage);
+    alphaAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute("aColor", colorAttr);
+    geo.setAttribute("aAlpha", alphaAttr);
+
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uSprite: { value: sprite } },
+      vertexShader: blurVertex,
+      fragmentShader: blurFragment,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+    });
+    const instanced = new THREE.InstancedMesh(geo, mat, MAX_BLUR_CELLS);
+    instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    instanced.frustumCulled = false;
+    return instanced;
+  }, [sprite]);
 
   const tileMesh = useMemo(() => {
     const geo = new THREE.PlaneGeometry(CELL, CELL);
@@ -290,123 +319,84 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
     school.update(t);
     drawn.current = true;
 
-    const n = school.cellCount;
     const dummy = scratch.matrix;
     const color = scratch.color;
     const tileColor = scratch.tileColor;
 
-    const tileColorAttr = tileMesh.geometry.getAttribute("aTileColor") as THREE.InstancedBufferAttribute;
-    const tileAlphaAttr = tileMesh.geometry.getAttribute("aTileAlpha") as THREE.InstancedBufferAttribute;
-
-    const glyphIndexAttr = glyphMesh.geometry.getAttribute("aGlyph") as THREE.InstancedBufferAttribute;
-    const alphaAttr = glyphMesh.geometry.getAttribute("aAlpha") as THREE.InstancedBufferAttribute;
-    const colorAttr = glyphMesh.geometry.getAttribute("aColor") as THREE.InstancedBufferAttribute;
-
-    for (let i = 0; i < n; i++) {
-      const cell = school.cells[i];
-      const x = cell.x + CELL / 2 - width / 2;
-      const y = -(cell.y + CELL / 2) + height / 2;
-      dummy.makeTranslation(x, y, 0);
-
-      tileMesh.setMatrixAt(i, dummy);
-      if (cell.tileColor) {
-        tileColor.set(cell.tileColor);
-        tileColorAttr.setXYZ(i, tileColor.r, tileColor.g, tileColor.b);
-        tileAlphaAttr.setX(i, cell.alpha);
-      } else {
-        tileAlphaAttr.setX(i, 0.0);
+    if (showBlur) {
+      const bn = school.blurCellCount;
+      const blurColorAttr = blurMesh.geometry.getAttribute("aColor") as THREE.InstancedBufferAttribute;
+      const blurAlphaAttr = blurMesh.geometry.getAttribute("aAlpha") as THREE.InstancedBufferAttribute;
+      for (let i = 0; i < bn; i++) {
+        const cell = school.blurCells[i];
+        const x = cell.x + CELL / 2 - width / 2;
+        const y = -(cell.y + CELL / 2) + height / 2;
+        const scale = 0.65 + 0.35 * Math.min(1.0, cell.alpha / 0.85);
+        dummy.makeScale(scale, scale, 1);
+        dummy.setPosition(x, y, 0);
+        blurMesh.setMatrixAt(i, dummy);
+        color.set(cell.tileColor);
+        blurColorAttr.setXYZ(i, color.r, color.g, color.b);
+        blurAlphaAttr.setX(i, cell.alpha);
       }
-
-      glyphMesh.setMatrixAt(i, dummy);
-      glyphIndexAttr.setX(i, Math.max(0, ATLAS_CHARS.indexOf(cell.glyph)));
-      alphaAttr.setX(i, cell.alpha);
-      color.set(cell.glyphColor);
-      colorAttr.setXYZ(i, color.r, color.g, color.b);
+      blurMesh.count = bn;
+      blurMesh.instanceMatrix.needsUpdate = true;
+      blurColorAttr.needsUpdate = true;
+      blurAlphaAttr.needsUpdate = true;
     }
 
-    tileMesh.count = n;
-    tileMesh.instanceMatrix.needsUpdate = true;
-    tileColorAttr.needsUpdate = true;
-    tileAlphaAttr.needsUpdate = true;
+    if (showSharp) {
+      const n = school.cellCount;
+      const tileColorAttr = tileMesh.geometry.getAttribute("aTileColor") as THREE.InstancedBufferAttribute;
+      const tileAlphaAttr = tileMesh.geometry.getAttribute("aTileAlpha") as THREE.InstancedBufferAttribute;
+      const glyphIndexAttr = glyphMesh.geometry.getAttribute("aGlyph") as THREE.InstancedBufferAttribute;
+      const alphaAttr = glyphMesh.geometry.getAttribute("aAlpha") as THREE.InstancedBufferAttribute;
+      const glyphColorAttr = glyphMesh.geometry.getAttribute("aColor") as THREE.InstancedBufferAttribute;
 
-    glyphMesh.count = n;
-    glyphMesh.instanceMatrix.needsUpdate = true;
-    glyphIndexAttr.needsUpdate = true;
-    alphaAttr.needsUpdate = true;
-    colorAttr.needsUpdate = true;
+      for (let i = 0; i < n; i++) {
+        const cell = school.cells[i];
+        const x = cell.x + CELL / 2 - width / 2;
+        const y = -(cell.y + CELL / 2) + height / 2;
+        dummy.makeTranslation(x, y, 0);
+
+        tileMesh.setMatrixAt(i, dummy);
+        if (cell.tileColor) {
+          tileColor.set(cell.tileColor);
+          tileColorAttr.setXYZ(i, tileColor.r, tileColor.g, tileColor.b);
+          tileAlphaAttr.setX(i, cell.alpha);
+        } else {
+          tileAlphaAttr.setX(i, 0.0);
+        }
+
+        glyphMesh.setMatrixAt(i, dummy);
+        glyphIndexAttr.setX(i, Math.max(0, ATLAS_CHARS.indexOf(cell.glyph)));
+        alphaAttr.setX(i, cell.alpha);
+        color.set(cell.glyphColor);
+        glyphColorAttr.setXYZ(i, color.r, color.g, color.b);
+      }
+
+      tileMesh.count = n;
+      tileMesh.instanceMatrix.needsUpdate = true;
+      tileColorAttr.needsUpdate = true;
+      tileAlphaAttr.needsUpdate = true;
+
+      glyphMesh.count = n;
+      glyphMesh.instanceMatrix.needsUpdate = true;
+      glyphIndexAttr.needsUpdate = true;
+      alphaAttr.needsUpdate = true;
+      glyphColorAttr.needsUpdate = true;
+    }
   });
 
   return (
     <>
-      <primitive object={tileMesh} />
-      <primitive object={glyphMesh} />
+      {showBlur && <primitive object={blurMesh} />}
+      {showSharp && (
+        <>
+          <primitive object={tileMesh} />
+          <primitive object={glyphMesh} />
+        </>
+      )}
     </>
   );
-}
-
-function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
-  const sprite = useMemo(() => buildSprite(), []);
-  const mesh = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(CELL * 1.6, CELL * 1.6);
-    const colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_BLUR_CELLS * 3), 3);
-    const alphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_BLUR_CELLS), 1);
-    colorAttr.setUsage(THREE.DynamicDrawUsage);
-    alphaAttr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute("aColor", colorAttr);
-    geo.setAttribute("aAlpha", alphaAttr);
-
-    const mat = new THREE.ShaderMaterial({
-      uniforms: {
-        uSprite: { value: sprite },
-      },
-      vertexShader: blurVertex,
-      fragmentShader: blurFragment,
-      transparent: true,
-      depthWrite: false,
-      depthTest: false,
-    });
-    const instanced = new THREE.InstancedMesh(geo, mat, MAX_BLUR_CELLS);
-    instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    instanced.frustumCulled = false;
-    return instanced;
-  }, [sprite]);
-
-  const scratch = useMemo(() => ({
-    matrix: new THREE.Matrix4(),
-    color: new THREE.Color(),
-  }), []);
-  const drawn = useRef(false);
-
-  useFrame((state) => {
-    if (reducedMotion && drawn.current) return;
-    if (document.hidden) return;
-    const t = reducedMotion ? 0 : state.clock.elapsedTime;
-    school.update(t);
-    drawn.current = true;
-
-    const n = school.blurCellCount;
-    const dummy = scratch.matrix;
-    const color = scratch.color;
-    const colorAttr = mesh.geometry.getAttribute("aColor") as THREE.InstancedBufferAttribute;
-    const alphaAttr = mesh.geometry.getAttribute("aAlpha") as THREE.InstancedBufferAttribute;
-
-    for (let i = 0; i < n; i++) {
-      const cell = school.blurCells[i];
-      const x = cell.x + CELL / 2 - width / 2;
-      const y = -(cell.y + CELL / 2) + height / 2;
-      const scale = 0.65 + 0.35 * Math.min(1.0, cell.alpha / 0.85);
-      dummy.makeScale(scale, scale, 1);
-      dummy.setPosition(x, y, 0);
-      mesh.setMatrixAt(i, dummy);
-      color.set(cell.tileColor);
-      colorAttr.setXYZ(i, color.r, color.g, color.b);
-      alphaAttr.setX(i, cell.alpha);
-    }
-    mesh.count = n;
-    mesh.instanceMatrix.needsUpdate = true;
-    colorAttr.needsUpdate = true;
-    alphaAttr.needsUpdate = true;
-  });
-
-  return <primitive object={mesh} />;
 }

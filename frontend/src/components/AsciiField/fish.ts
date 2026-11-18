@@ -18,9 +18,9 @@ const SPARKLE_GLYPH = "#dcc4ff";
 
 const WAKE_GLYPH_COLOR = "#8c90a4";
 
-const OMEGA = 0.164;
-const WAKE_STEPS = 16;
-const WAKE_STEP_SECONDS = 0.07;
+const OMEGA = 0.056;
+const WAKE_STEPS = 14;
+const WAKE_STEP_SECONDS = 0.14;
 
 export type FishKind = "large" | "medium" | "small";
 export type CellKind = "body" | "wake" | "fringe";
@@ -129,19 +129,19 @@ export class School {
     this.update(0);
   }
 
-  /** smoothly follow the mouse target coordinate. */
+  /** smoothly follow the mouse target coordinate with fluid damping. */
   private updateMouse(): void {
     if (this.mouseActive) {
       if (this.mouseX < -9000) {
         this.mouseX = this.targetMouseX;
         this.mouseY = this.targetMouseY;
       } else {
-        this.mouseX += (this.targetMouseX - this.mouseX) * 0.3;
-        this.mouseY += (this.targetMouseY - this.mouseY) * 0.3;
+        this.mouseX += (this.targetMouseX - this.mouseX) * 0.12;
+        this.mouseY += (this.targetMouseY - this.mouseY) * 0.12;
       }
-      this.mouseStrength = Math.min(1.0, this.mouseStrength + 0.12);
+      this.mouseStrength = Math.min(1.0, this.mouseStrength + 0.08);
     } else {
-      this.mouseStrength = Math.max(0.0, this.mouseStrength - 0.08);
+      this.mouseStrength = Math.max(0.0, this.mouseStrength - 0.05);
     }
   }
 
@@ -155,7 +155,7 @@ export class School {
     if (f.leaderId < 0) return this.thetaAt(f, t);
     const leader = this.fish.find((o) => o.id === f.leaderId);
     if (!leader) return this.thetaAt(f, t);
-    return this.thetaAt(leader, t) + f.lag + Math.sin(t * 1.6 + f.phase) * 0.02;
+    return this.thetaAt(leader, t) + f.lag + Math.sin(t * 0.8 + f.phase) * 0.015;
   }
 
   /** position on the ellipse with radial sway and mouse repulsion. */
@@ -167,12 +167,12 @@ export class School {
     const cx = this.width / 2;
     const cy = this.height / 2;
     const theta = this.leaderThetaAt(f, t);
-    const s = sway ? Math.sin(t * 2.6 + f.phase) * 16 : 0;
+    const s = sway ? Math.sin(t * 0.9 + f.phase) * 12 : 0;
     const vx = Math.sin(theta);
     const vy = -Math.cos(theta);
     const lx = -vy;
     const ly = vx;
-    const lat = (f.lateralOffset ? f.lateralOffset * CELL : 0) + (sway ? Math.cos(t * 1.8 + f.phase) * 9 : 0);
+    const lat = (f.lateralOffset ? f.lateralOffset * CELL : 0) + (sway ? Math.cos(t * 0.7 + f.phase) * 8 : 0);
 
     let x = cx + f.rx * Math.cos(theta) + vx * s + lx * lat;
     let y = cy + f.ry * Math.sin(theta) + vy * s + ly * lat;
@@ -184,7 +184,7 @@ export class School {
       const dist = Math.hypot(mdx, mdy);
       if (dist < 180 && dist > 1) {
         const prox = (1 - dist / 180) * this.mouseStrength;
-        const push = prox * prox * 55;
+        const push = prox * prox * 50;
         x += (mdx / dist) * push;
         y += (mdy / dist) * push;
         agitation = prox;
@@ -262,7 +262,7 @@ export class School {
       ry: ry * jitter,
       scale,
       phase: this.rand() * Math.PI * 2,
-      sparklePeriod: 0.9 + this.rand() * 0.7,
+      sparklePeriod: 2.2 + this.rand() * 1.4,
       leaderId: -1,
       lag: 0,
       lateralOffset: 0,
@@ -308,9 +308,9 @@ export class School {
   /** calculate the smooth body coverage from the envelope distance. */
   private bodyCoverage(u: number, v: number, flap: number, wag: number): number {
     if (u >= 1.0 && u <= 1.8) {
-      if (v < 0.3 || v > 1.4) return 0.0;
-      const margin = Math.min(v - 0.3, 1.4 - v);
-      return Math.min(1.0, Math.max(0.0, (margin + 0.2) / 0.4));
+      if (v < 0.35 || v > 1.35) return 0.0;
+      const margin = Math.min(v - 0.35, 1.35 - v);
+      return Math.min(1.0, Math.max(0.0, (margin + 0.25) / 0.5));
     }
     if (u >= 0.0 && u < 1.0) {
       if (v <= 0.8) return 1.0;
@@ -321,7 +321,7 @@ export class School {
     if (u >= -2.2 && u < 0.0) {
       if (v <= 0.8) return 1.0;
       const taper = Math.pow((u + 2.2) / 2.2, 0.85);
-      const targetW = 0.8 + 2.2 * (1.0 + flap * 0.35) * taper;
+      const targetW = 0.8 + 2.2 * (1.0 + flap * 0.28) * taper;
       const margin = targetW - v;
       return Math.min(1.0, Math.max(0.0, (margin + 0.3) / 0.6));
     }
@@ -333,12 +333,12 @@ export class School {
   }
 
   /** verify if local coordinates (u, v) fall inside the fringe wake. */
-  private isFringeCell(u: number, v: number, fishId: number, dx: number, dy: number, t: number): boolean {
+  private isFringeCell(u: number, v: number, fishId: number, gx: number, gy: number, t: number): boolean {
     if (v <= 1.2 || v >= 3.2 || u <= -2.0 || u >= 0.8) return false;
-    return hash01(fishId * 57 + dx * 13 + dy, Math.floor(t * 5.0)) < 0.32;
+    return hash01(fishId * 57 + gx * 13 + gy, Math.floor(t * 2.5)) < 0.28;
   }
 
-  /** paint one fish at time t. */
+  /** paint one fish at time t with continuous spatial rasterization. */
   private emitFish(f: Fish, t: number): void {
     const pos = this.positionAt(f, t, true);
     const theta = this.leaderThetaAt(f, t);
@@ -356,49 +356,51 @@ export class School {
     const tilePalette = isGold ? GOLD_TILES : BLUE_TILES;
     const glyphColor = isGold ? GOLD_GLYPH : BLUE_GLYPH;
 
-    const wagSpeed = 6.2 * (1 + pos.agitation * 0.8);
-    const wag = Math.sin(t * wagSpeed + f.phase) * (0.42 + pos.agitation * 0.2);
+    const wagSpeed = 2.4 * (1 + pos.agitation * 0.6);
+    const wag = Math.sin(t * wagSpeed + f.phase) * (0.32 + pos.agitation * 0.15);
 
     const windowIndex = Math.floor(t / f.sparklePeriod);
-    const inWindow = (t % f.sparklePeriod) < 0.32 || pos.agitation > 0.4;
-    const sparkleSlot1 = inWindow
-      ? Math.floor(hash01(f.id * 991 + 37, windowIndex * 17) * 24)
-      : -1;
-    const sparkleSlot2 = inWindow
-      ? Math.floor(hash01(f.id * 533 + 71, windowIndex * 23) * 24)
+    const inWindow = (t % f.sparklePeriod) < 0.35 || pos.agitation > 0.4;
+    const sparkleSlot = inWindow
+      ? Math.floor(hash01(f.id * 991 + 37, windowIndex * 17) * 22)
       : -1;
 
-    const headGx = Math.round(pos.x / CELL);
-    const headGy = Math.round(pos.y / CELL);
+    const radius = 5.5 * s * CELL;
+    const minGx = Math.floor((pos.x - radius) / CELL);
+    const maxGx = Math.ceil((pos.x + radius) / CELL);
+    const minGy = Math.floor((pos.y - radius) / CELL);
+    const maxGy = Math.ceil((pos.y + radius) / CELL);
 
-    const box = Math.max(3, Math.ceil(5.5 * s));
     let slot = 0;
     const occupied = new Set<string>();
 
-    for (let dy = -box; dy <= box; dy++) {
-      for (let dx = -box; dx <= box; dx++) {
-        const u = (dx * fx + dy * fy) / s;
-        const v = Math.abs(dx * lx + dy * ly) / s;
+    for (let gy = minGy; gy <= maxGy; gy++) {
+      const cellY = gy * CELL;
+      const dy = cellY - pos.y;
+      for (let gx = minGx; gx <= maxGx; gx++) {
+        const cellX = gx * CELL;
+        const dx = cellX - pos.x;
 
-        const gx = headGx + dx;
-        const gy = headGy + dy;
+        const u = (dx * fx + dy * fy) / (s * CELL);
+        const v = Math.abs(dx * lx + dy * ly) / (s * CELL);
+
         const key = `${gx},${gy}`;
-
-        const flapSpeed = 4.8 * (1 + pos.agitation * 0.7);
-        const wingPhase = t * flapSpeed + f.phase - u * 0.4;
-        const flap = Math.sin(wingPhase) * (1 + pos.agitation * 0.5);
+        const flapSpeed = 1.6 * (1 + pos.agitation * 0.5);
+        const wingPhase = t * flapSpeed + f.phase - u * 0.35;
+        const flap = Math.sin(wingPhase) * (1 + pos.agitation * 0.3);
 
         const cov = this.bodyCoverage(u, v, flap, wag);
-        if (cov >= 0.2) {
+        if (cov >= 0.18) {
           occupied.add(key);
-          const sparkle = slot === sparkleSlot1 || slot === sparkleSlot2;
-          const nuance = tilePalette[Math.floor(hash01(f.id * 89 + slot, 31) * tilePalette.length)];
+          const sparkle = slot === sparkleSlot;
+          const cellHash = hash01(gx * 73 + gy * 179 + f.id * 89, 31);
+          const nuance = tilePalette[Math.floor(cellHash * tilePalette.length)];
           const tile = sparkle ? SPARKLE_TILE : nuance;
           const glyph = sparkle ? SPARKLE_GLYPH : glyphColor;
 
           this.pushCell(
-            gx * CELL,
-            gy * CELL,
+            cellX,
+            cellY,
             this.pickGlyph(f.id * 131 + slot, t),
             glyph,
             tile,
@@ -406,15 +408,15 @@ export class School {
             "body",
           );
           slot++;
-        } else if (this.isFringeCell(u, v, f.id, dx, dy, t)) {
+        } else if (this.isFringeCell(u, v, f.id, gx, gy, t)) {
           occupied.add(key);
           this.pushCell(
-            gx * CELL,
-            gy * CELL,
+            cellX,
+            cellY,
             this.pickWakeGlyph(f.id * 211 + slot, t),
             WAKE_GLYPH_COLOR,
             "",
-            0.6,
+            0.55,
             "fringe",
           );
           slot++;
@@ -446,7 +448,7 @@ export class School {
       const pfy = pvy / pSpeed;
 
       const trail = i / WAKE_STEPS;
-      const serpentine = Math.sin(t * 6.8 + i * 0.5) * (trail * 0.6 * CELL);
+      const serpentine = Math.sin(t * 2.8 + i * 0.4) * (trail * 0.5 * CELL);
       const tailX = past.x - pfx * (2.8 * s * CELL) + lx * serpentine;
       const tailY = past.y - pfy * (2.8 * s * CELL) + ly * serpentine;
       const wgx = Math.round(tailX / CELL);
@@ -461,14 +463,14 @@ export class School {
           this.pickWakeGlyph(f.id * 611 + i, t),
           WAKE_GLYPH_COLOR,
           "",
-          0.75 * (1 - trail),
+          0.7 * (1 - trail),
           "wake",
         );
       }
     }
   }
 
-  /** paint one out-of-focus background fish at time t. */
+  /** paint one out-of-focus background fish with continuous rasterization. */
   private emitBlurFish(f: Fish, t: number): void {
     const pos = this.positionAt(f, t, true);
     const theta = this.thetaAt(f, t);
@@ -481,29 +483,35 @@ export class School {
     const ly = fx;
 
     const s = f.scale;
-    const flapSpeed = 4.6 * (1 + pos.agitation * 0.7);
-    const flap = Math.sin(t * flapSpeed + f.phase) * (1 + pos.agitation * 0.4);
-    const wagSpeed = 6.0 * (1 + pos.agitation * 0.8);
-    const wag = Math.sin(t * wagSpeed + f.phase) * (0.35 + pos.agitation * 0.2);
+    const flapSpeed = 1.5 * (1 + pos.agitation * 0.5);
+    const flap = Math.sin(t * flapSpeed + f.phase) * (1 + pos.agitation * 0.25);
+    const wagSpeed = 2.2 * (1 + pos.agitation * 0.6);
+    const wag = Math.sin(t * wagSpeed + f.phase) * (0.28 + pos.agitation * 0.15);
 
     const isGold = f.family === "gold";
     const baseColor = isGold ? "#3a3226" : "#2d354a";
     const spineColor = isGold ? "#4e4333" : "#3d4766";
 
-    const box = Math.max(3, Math.ceil(5.5 * s));
-    const headGx = Math.round(pos.x / CELL);
-    const headGy = Math.round(pos.y / CELL);
+    const radius = 5.5 * s * CELL;
+    const minGx = Math.floor((pos.x - radius) / CELL);
+    const maxGx = Math.ceil((pos.x + radius) / CELL);
+    const minGy = Math.floor((pos.y - radius) / CELL);
+    const maxGy = Math.ceil((pos.y + radius) / CELL);
 
-    for (let dy = -box; dy <= box; dy++) {
-      for (let dx = -box; dx <= box; dx++) {
-        const u = (dx * fx + dy * fy) / s;
-        const v = Math.abs(dx * lx + dy * ly) / s;
+    for (let gy = minGy; gy <= maxGy; gy++) {
+      const cellY = gy * CELL;
+      const dy = cellY - pos.y;
+      for (let gx = minGx; gx <= maxGx; gx++) {
+        const cellX = gx * CELL;
+        const dx = cellX - pos.x;
+
+        const u = (dx * fx + dy * fy) / (s * CELL);
+        const v = Math.abs(dx * lx + dy * ly) / (s * CELL);
+
         const cov = this.bodyCoverage(u, v, flap, wag);
-        if (cov >= 0.15) {
-          const px = (headGx + dx) * CELL;
-          const py = (headGy + dy) * CELL;
+        if (cov >= 0.12) {
           const color = v <= 0.8 ? spineColor : baseColor;
-          this.pushBlurCell(px, py, color, cov * 0.85);
+          this.pushBlurCell(cellX, cellY, color, cov * 0.85);
         }
       }
     }
@@ -543,15 +551,14 @@ export class School {
     this.blurCellCount++;
   }
 
-  /** pick a body glyph that updates at eight hertz. */
+  /** pick a body glyph that updates calmly at about 1.8 hertz. */
   private pickGlyph(seed: number, t: number): string {
-    const hold = hash01(seed + 7, Math.floor(t * 3.0)) < 0.35;
-    const step = hold ? Math.floor(t * 3.0) : Math.floor(t * 8.0);
+    const step = Math.floor(t * 1.8);
     return BODY_GLYPHS[Math.floor(hash01(seed, step) * BODY_GLYPHS.length)];
   }
 
   /** pick a wake glyph from the table. */
   private pickWakeGlyph(seed: number, t: number): string {
-    return WAKE_GLYPHS[Math.floor(hash01(seed, Math.floor(t * 5)) * WAKE_GLYPHS.length)];
+    return WAKE_GLYPHS[Math.floor(hash01(seed, Math.floor(t * 2)) * WAKE_GLYPHS.length)];
   }
 }

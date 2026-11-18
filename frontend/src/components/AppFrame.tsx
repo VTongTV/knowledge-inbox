@@ -6,21 +6,18 @@ import { Sidebar } from "./Sidebar";
 
 interface AppFrameProps {
   children: ReactNode;
-  /** the blurred fish layer, rendered first. */
-  blurFish: ReactNode;
-  /** the sharp fish layer, rendered on top with pointer-events none. */
-  sharpFish: ReactNode;
+  /** the background fish field, rendered on a single webgl canvas. */
+  backgroundField: ReactNode;
   onResetChat: () => void;
   onOpenSaved: () => void;
   onHelp: () => void;
 }
 
-export function AppFrame({ children, blurFish, sharpFish, onResetChat, onOpenSaved, onHelp }: AppFrameProps) {
+export function AppFrame({ children, backgroundField, onResetChat, onOpenSaved, onHelp }: AppFrameProps) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="app-frame">
-      <div className="fish-blur">{blurFish}</div>
-      <div className="fish-sharp">{sharpFish}</div>
+      <div className="fish-field">{backgroundField}</div>
       <div className="app-grid" />
       <div className="app-vignette" />
       <Sidebar

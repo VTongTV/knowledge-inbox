@@ -121,8 +121,7 @@ export default function App() {
 
   return (
     <AppFrame
-      blurFish={<AsciiField layer="blur" />}
-      sharpFish={<AsciiField layer="sharp" />}
+      backgroundField={<AsciiField />}
       onResetChat={resetChat}
       onOpenSaved={() => setDrawerOpen(true)}
       onHelp={() => setHelpOpen(true)}
