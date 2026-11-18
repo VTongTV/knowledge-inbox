@@ -19,9 +19,10 @@ export function AppFrame({ children, blurFish, sharpFish, onResetChat, onOpenSav
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="app-frame">
+      <div className="fish-blur">{blurFish}</div>
+      <div className="fish-sharp">{sharpFish}</div>
       <div className="app-grid" />
       <div className="app-vignette" />
-      <div className="fish-blur">{blurFish}</div>
       <Sidebar
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
@@ -40,7 +41,6 @@ export function AppFrame({ children, blurFish, sharpFish, onResetChat, onOpenSav
         </button>
       )}
       {children}
-      <div className="fish-sharp">{sharpFish}</div>
     </div>
   );
 }
