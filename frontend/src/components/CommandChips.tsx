@@ -1,10 +1,10 @@
 // chips tailored to the knowledge-inbox assessment: each one drives
 // ingest, or the cited-answer query loop.
 const CHIPS = [
-  "/summarize my saved items",
-  "/what did I save about ",
-  "/key claims with citations",
-  "/find gaps in my sources",
+  "/skim a thread",
+  "/sketch a plan",
+  "/sift my notes",
+  "/sharpen a draft",
 ];
 
 interface CommandChipsProps {

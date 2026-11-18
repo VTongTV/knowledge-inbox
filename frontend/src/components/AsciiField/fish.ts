@@ -8,14 +8,14 @@ export const CELL = 14;
 export const BODY_GLYPHS = ["%", "8", "#", "X", "@", "S"];
 export const WAKE_GLYPHS = ["t", "o", ":", ";", ".", "'", ","];
 
-const GOLD_TILES = ["#544838", "#5a4e3e", "#635645", "#6a5c4a", "#71634f"];
+const GOLD_TILES = ["#635442", "#6c5c48", "#75644e", "#7e6c54", "#87745b"];
 const GOLD_GLYPH = "#eee5d7";
 
-const BLUE_TILES = ["#343a4e", "#3a4157", "#414860", "#485069", "#4f5773"];
+const BLUE_TILES = ["#383f58", "#3f4763", "#464f6e", "#4d577a", "#545f85"];
 const BLUE_GLYPH = "#e2e6fa";
 
-const SPARKLE_TILE = "#5a4d78";
-const SPARKLE_GLYPH = "#d8b4fe";
+const SPARKLE_TILE = "#68588c";
+const SPARKLE_GLYPH = "#dcc4ff";
 
 const WAKE_GLYPH_COLOR = "#8c90a4";
 
@@ -51,6 +51,7 @@ interface Fish {
   sparklePeriod: number;
   leaderId: number;
   lag: number;
+  lateralOffset: number;
 }
 
 function mulberry32(seed: number): () => number {
@@ -134,18 +135,21 @@ export class School {
     const s = sway ? Math.sin(t * 0.6 + f.phase) * 10 : 0;
     const vx = Math.sin(theta);
     const vy = -Math.cos(theta);
+    const lx = -vy;
+    const ly = vx;
+    const lat = f.lateralOffset ? f.lateralOffset * CELL : 0;
     return {
-      x: cx + f.rx * Math.cos(theta) + vx * s,
-      y: cy + f.ry * Math.sin(theta) + vy * s,
+      x: cx + f.rx * Math.cos(theta) + vx * s + lx * lat,
+      y: cy + f.ry * Math.sin(theta) + vy * s + ly * lat,
     };
   }
 
   private buildFish(): void {
     const starts: { kind: FishKind; family: "gold" | "blue"; theta: number; scale: number }[] = [
-      { kind: "large", family: "gold", theta: (3 * Math.PI) / 2 + 0.15, scale: 1.3 },
-      { kind: "large", family: "blue", theta: (7 * Math.PI) / 4 + 0.2, scale: 1.25 },
-      { kind: "large", family: "gold", theta: 0.15, scale: 1.3 },
-      { kind: "large", family: "blue", theta: Math.PI / 2 - 0.2, scale: 1.25 },
+      { kind: "large", family: "gold", theta: (3 * Math.PI) / 2 + 0.15, scale: 1.35 },
+      { kind: "large", family: "blue", theta: (7 * Math.PI) / 4 + 0.2, scale: 1.3 },
+      { kind: "large", family: "gold", theta: 0.15, scale: 1.35 },
+      { kind: "large", family: "blue", theta: Math.PI / 2 - 0.2, scale: 1.3 },
       { kind: "medium", family: "gold", theta: (3 * Math.PI) / 4 + 0.1, scale: 1.0 },
       { kind: "medium", family: "blue", theta: Math.PI - 0.35, scale: 1.0 },
       { kind: "medium", family: "gold", theta: (3 * Math.PI) / 2 - 0.75, scale: 0.95 },
@@ -154,21 +158,23 @@ export class School {
     const ry = 0.41 * this.height;
     this.fish = starts.map((s, i) => this.makeFish(i, s.kind, s.family, s.theta, rx, ry, s.scale));
 
-    const largeIds = this.fish.filter((f) => f.kind === "large").map((f) => f.id);
-    for (let i = 0; i < 5; i++) {
-      const leader = largeIds[i % largeIds.length];
+    const largeFish = this.fish.filter((f) => f.kind === "large");
+    for (let i = 0; i < 4; i++) {
+      const leader = largeFish[i % largeFish.length];
+      const side = i % 2 === 0 ? 1 : -1;
       const f = this.makeFish(
         starts.length + i,
         "small",
-        this.rand() < 0.5 ? "gold" : "blue",
+        leader.family,
         0,
         rx,
         ry,
-        0.72,
+        0.7,
       );
-      f.leaderId = leader;
-      f.lag = 0.035 + this.rand() * 0.05;
-      f.omega = this.fish[leader].omega;
+      f.leaderId = leader.id;
+      f.lag = 0.15 + this.rand() * 0.08;
+      f.lateralOffset = side * (3.0 + this.rand() * 1.5);
+      f.omega = leader.omega;
       this.fish.push(f);
     }
   }
@@ -205,6 +211,7 @@ export class School {
       sparklePeriod: 2.6 + this.rand() * 1.4,
       leaderId: -1,
       lag: 0,
+      lateralOffset: 0,
     };
   }
 
@@ -243,11 +250,29 @@ export class School {
     for (const f of this.blurFish) this.emitBlurFish(f, t);
   }
 
+  /** check if local coordinates (u, v) fall inside the knowledge inbox body. */
+  private isBodyCell(u: number, v: number, flap: number, wag: number): boolean {
+    if (u >= 1.0 && u <= 1.8 && v >= 0.4 && v <= 1.3) {
+      return true;
+    }
+    if (u >= -2.2 && u < 1.0) {
+      if (v <= 0.8) return true;
+      if (u >= 0.0) {
+        return v <= 0.8 + (1.0 - u) * 1.5;
+      }
+      const taper = Math.pow((u - (-2.2)) / 2.2, 0.85);
+      return v <= 0.8 + 2.2 * (1.0 + flap * 0.2) * taper;
+    }
+    if (u >= -3.5 && u < -2.2) {
+      return Math.abs(v - wag) <= 0.55;
+    }
+    return false;
+  }
+
   private emitFish(f: Fish, t: number): void {
     const center = this.positionAt(f, t, true);
     const theta = this.leaderThetaAt(f, t);
 
-    // forward tangent along travel path; lateral is normal to path.
     const vx = Math.sin(theta) * f.rx;
     const vy = -Math.cos(theta) * f.ry;
     const speed = Math.hypot(vx, vy) || 1;
@@ -264,7 +289,6 @@ export class School {
     const flap = Math.sin(t * 1.6 + f.phase);
     const wag = Math.sin(t * 2.2 + f.phase) * 0.25;
 
-    // sparkle: one cell turns lavender near the cycle midpoint.
     const windowIndex = Math.floor(t / f.sparklePeriod);
     const inWindow = (t % f.sparklePeriod) < 0.28;
     const sparkleSlot = inWindow
@@ -283,36 +307,11 @@ export class School {
         const u = (dx * fx + dy * fy) / s;
         const v = Math.abs(dx * lx + dy * ly) / s;
 
-        let isBody = false;
-
-        // cephalic horns at front of ray.
-        if (u >= 1.2 && u <= 1.95 && v >= 0.35 && v <= 1.15) {
-          isBody = true;
-        } else if (u >= -2.4 && u < 1.2) {
-          // main body and broad wings.
-          if (v <= 0.85) {
-            isBody = true;
-          } else if (u >= -0.2) {
-            const edge = 0.85 + (1.2 - u) * 1.8;
-            if (v <= edge) isBody = true;
-          } else {
-            const taper = Math.pow((u - (-2.4)) / 2.2, 0.85);
-            const edge = 0.85 + 2.7 * (1.0 + flap * 0.18) * taper;
-            if (v <= edge) isBody = true;
-          }
-        } else if (u >= -3.6 && u < -2.4) {
-          // slender tail at rear.
-          const lateralOffset = (dx * lx + dy * ly) / s;
-          if (Math.abs(lateralOffset - wag) <= 0.55) {
-            isBody = true;
-          }
-        }
-
         const gx = headGx + dx;
         const gy = headGy + dy;
         const key = `${gx},${gy}`;
 
-        if (isBody) {
+        if (this.isBodyCell(u, v, flap, wag)) {
           occupied.add(key);
           const sparkle = slot === sparkleSlot;
           const nuance = tilePalette[Math.floor(hash01(f.id * 89 + slot, 31) * tilePalette.length)];
@@ -329,9 +328,8 @@ export class School {
             "body",
           );
           slot++;
-        } else if (v > 1.2 && v < 3.8 && u > -2.2 && u < 1.0) {
-          // occasional fringe glyph at wing edge without tile.
-          if (hash01(f.id * 57 + dx * 13 + dy, Math.floor(t * 2)) < 0.28) {
+        } else if (v > 1.2 && v < 3.2 && u > -2.0 && u < 0.8) {
+          if (hash01(f.id * 57 + dx * 13 + dy, Math.floor(t * 2)) < 0.25) {
             occupied.add(key);
             this.pushCell(
               gx * CELL,
@@ -348,38 +346,40 @@ export class School {
       }
     }
 
-    // emit wake trail along past path.
-    if (f.kind !== "small") {
-      for (let i = 1; i <= WAKE_STEPS; i++) {
-        const age = i * WAKE_STEP_SECONDS;
-        const past = this.positionAt(f, t - age, true);
-        const pastTheta = this.leaderThetaAt(f, t - age);
-        const pvx = Math.sin(pastTheta) * f.rx;
-        const pvy = -Math.cos(pastTheta) * f.ry;
-        const pSpeed = Math.hypot(pvx, pvy) || 1;
-        const pfx = pvx / pSpeed;
-        const pfy = pvy / pSpeed;
+    this.emitWakeTrail(f, t, s, occupied);
+  }
 
-        const tailX = past.x - pfx * (3.0 * s * CELL);
-        const tailY = past.y - pfy * (3.0 * s * CELL);
-        const wgx = Math.round(tailX / CELL);
-        const wgy = Math.round(tailY / CELL);
-        const wkey = `${wgx},${wgy}`;
+  /** emit wake glyphs along the past trajectory of the fish. */
+  private emitWakeTrail(f: Fish, t: number, s: number, occupied: Set<string>): void {
+    if (f.kind === "small") return;
+    for (let i = 1; i <= WAKE_STEPS; i++) {
+      const age = i * WAKE_STEP_SECONDS;
+      const past = this.positionAt(f, t - age, true);
+      const pastTheta = this.leaderThetaAt(f, t - age);
+      const pvx = Math.sin(pastTheta) * f.rx;
+      const pvy = -Math.cos(pastTheta) * f.ry;
+      const pSpeed = Math.hypot(pvx, pvy) || 1;
+      const pfx = pvx / pSpeed;
+      const pfy = pvy / pSpeed;
 
-        if (!occupied.has(wkey)) {
-          occupied.add(wkey);
-          const trail = i / WAKE_STEPS;
-          this.pushCell(
-            wgx * CELL,
-            wgy * CELL,
-            this.pickWakeGlyph(f.id * 611 + i, t),
-            WAKE_GLYPH_COLOR,
-            "",
-            0,
-            0.65 * (1 - trail),
-            "wake",
-          );
-        }
+      const tailX = past.x - pfx * (2.8 * s * CELL);
+      const tailY = past.y - pfy * (2.8 * s * CELL);
+      const wgx = Math.round(tailX / CELL);
+      const wgy = Math.round(tailY / CELL);
+      const wkey = `${wgx},${wgy}`;
+
+      if (!occupied.has(wkey)) {
+        occupied.add(wkey);
+        const trail = i / WAKE_STEPS;
+        this.pushCell(
+          wgx * CELL,
+          wgy * CELL,
+          this.pickWakeGlyph(f.id * 611 + i, t),
+          WAKE_GLYPH_COLOR,
+          "",
+          0.65 * (1 - trail),
+          "wake",
+        );
       }
     }
   }
@@ -419,7 +419,6 @@ export class School {
     glyph: string,
     glyphColor: string,
     tileColor: string,
-    tileAlpha: number,
     alpha: number,
     kind: CellKind,
   ): void {
