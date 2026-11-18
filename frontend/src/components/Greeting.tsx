@@ -15,7 +15,7 @@ export function Greeting() {
   return (
     <div className="greeting">
       <span className="greeting-dot" aria-hidden />
-      <span>Good {part}, Ines</span>
+      <span>Good {part}</span>
       <span className="greeting-time">{time}</span>
     </div>
   );
