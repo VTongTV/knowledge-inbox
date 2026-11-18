@@ -1,45 +1,27 @@
 // the ascii fish school for the knowledge inbox background.
-// pure typescript: no dom, no renderer. the sim is a pure function of
+// pure typescript: no dom, no renderer. the sim is a function of
 // the wall clock, so the school is correct at any render cadence.
 
 /** one grid cell, in css pixels. the renderer snaps it to the 14px grid. */
 export const CELL = 14;
 
-const BODY_GLYPHS = ["%", "8", "#", "X", "@", "S"];
-const WAKE_GLYPHS = ["t", "o", ":", ";", ".", "'"];
+export const BODY_GLYPHS = ["%", "8", "#", "X", "@", "S"];
+export const WAKE_GLYPHS = ["t", "o", ":", ";", ".", "'", ","];
 
-const GOLD_TILE = "#6d6559";
-const GOLD_GLYPH = "#d3c8bb";
-const BLUE_TILE = "#4d5065";
-const BLUE_GLYPH = "#c1c4d9";
-const SPARKLE_GLYPH = "#9aa0f0";
-const FRINGE_COLOR = "#c8c8d2";
+const GOLD_TILES = ["#544838", "#5a4e3e", "#635645", "#6a5c4a", "#71634f"];
+const GOLD_GLYPH = "#eee5d7";
 
-const BLUR_PEAK = "#54545e";
-const BLUR_MID = "#252530";
+const BLUE_TILES = ["#343a4e", "#3a4157", "#414860", "#485069", "#4f5773"];
+const BLUE_GLYPH = "#e2e6fa";
 
-/** profiles decoded from the reference crops: row widths, head first. */
-const PROFILES: Record<FishKind, number[][]> = {
-  large: [
-    [2, 4, 6, 8, 8, 6, 2],
-    [5, 6, 7, 6, 6, 3],
-    [2, 3, 4, 5, 5, 6, 5, 3],
-  ],
-  medium: [
-    [2, 4, 6, 6, 4, 2],
-    [3, 5, 5, 3],
-    [2, 3, 4, 5, 4, 3],
-  ],
-  small: [
-    [3, 2, 3],
-    [2, 3, 2],
-    [3, 3],
-  ],
-};
+const SPARKLE_TILE = "#5a4d78";
+const SPARKLE_GLYPH = "#d8b4fe";
 
-const SMALL_COUNT = 8;
+const WAKE_GLYPH_COLOR = "#8c90a4";
 
-const OMEGA = 0.055;
+const BLUR_COLOR = "#3c4156";
+
+const OMEGA = 0.052;
 const WAKE_STEPS = 10;
 const WAKE_STEP_SECONDS = 0.16;
 
@@ -64,7 +46,7 @@ interface Fish {
   omega: number;
   rx: number;
   ry: number;
-  profile: number[];
+  scale: number;
   phase: number;
   sparklePeriod: number;
   leaderId: number;
@@ -87,24 +69,8 @@ function hash01(a: number, b: number): number {
   return (Math.imul(n ^ (n >>> 13), 1274126177) >>> 0) / 4294967296;
 }
 
-function mixHex(a: string, b: string, t: number): string {
-  const pa = parseInt(a.slice(1), 16);
-  const pb = parseInt(b.slice(1), 16);
-  const ar = (pa >> 16) & 255;
-  const ag = (pa >> 8) & 255;
-  const ab = pa & 255;
-  const br = (pb >> 16) & 255;
-  const bg = (pb >> 8) & 255;
-  const bb = pb & 255;
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return `#${((r << 16) | (g << 8) | bl).toString(16).padStart(6, "0")}`;
-}
-
 /**
- * the fish school. positions are a function of the wall clock,
- * so any render rate paints the correct frame.
+ * the fish school. positions are a function of the wall clock.
  * call update(t) once per frame; read cells[0..cellCount).
  */
 export class School {
@@ -160,7 +126,7 @@ export class School {
     return this.thetaAt(leader, t) + f.lag + Math.sin(t * 0.5 + f.phase) * 0.015;
   }
 
-  /** position on the ellipse, with the radial sway when requested. */
+  /** position on the ellipse, with radial sway when requested. */
   private positionAt(f: Fish, t: number, sway: boolean): { x: number; y: number } {
     const cx = this.width / 2;
     const cy = this.height / 2;
@@ -175,50 +141,44 @@ export class School {
   }
 
   private buildFish(): void {
-    // pre-warm placement from the reference first frame:
-    // large gold near top-centre and right edge, large blue bottom-centre.
-    const starts: { kind: FishKind; family: "gold" | "blue"; theta: number }[] = [
-      { kind: "large", family: "gold", theta: (3 * Math.PI) / 2 + 0.25 },
-      { kind: "large", family: "gold", theta: 0.15 },
-      { kind: "large", family: "gold", theta: -0.3 },
-      { kind: "large", family: "blue", theta: Math.PI / 2 - 0.35 },
-      { kind: "large", family: "gold", theta: Math.PI + 0.45 },
-      { kind: "large", family: "blue", theta: Math.PI - 0.6 },
-      { kind: "medium", family: "blue", theta: (3 * Math.PI) / 2 - 0.9 },
-      { kind: "medium", family: "gold", theta: Math.PI / 2 + 1.1 },
-      { kind: "medium", family: "blue", theta: 0.9 },
-      { kind: "medium", family: "gold", theta: Math.PI + 1.4 },
+    const starts: { kind: FishKind; family: "gold" | "blue"; theta: number; scale: number }[] = [
+      { kind: "large", family: "gold", theta: (3 * Math.PI) / 2 + 0.15, scale: 1.3 },
+      { kind: "large", family: "blue", theta: (7 * Math.PI) / 4 + 0.2, scale: 1.25 },
+      { kind: "large", family: "gold", theta: 0.15, scale: 1.3 },
+      { kind: "large", family: "blue", theta: Math.PI / 2 - 0.2, scale: 1.25 },
+      { kind: "medium", family: "gold", theta: (3 * Math.PI) / 4 + 0.1, scale: 1.0 },
+      { kind: "medium", family: "blue", theta: Math.PI - 0.35, scale: 1.0 },
+      { kind: "medium", family: "gold", theta: (3 * Math.PI) / 2 - 0.75, scale: 0.95 },
     ];
-    const rx = 0.46 * this.width;
-    const ry = 0.43 * this.height;
-    this.fish = starts.map((s, i) => this.makeFish(i, s.kind, s.family, s.theta, rx, ry));
+    const rx = 0.44 * this.width;
+    const ry = 0.41 * this.height;
+    this.fish = starts.map((s, i) => this.makeFish(i, s.kind, s.family, s.theta, rx, ry, s.scale));
 
-    // small fry follow a large fish at a 1 to 3 cell lag.
     const largeIds = this.fish.filter((f) => f.kind === "large").map((f) => f.id);
-    for (let i = 0; i < SMALL_COUNT; i++) {
+    for (let i = 0; i < 5; i++) {
       const leader = largeIds[i % largeIds.length];
       const f = this.makeFish(
         starts.length + i,
         "small",
-        this.rand() < 0.55 ? "gold" : "blue",
-        Math.random() * Math.PI * 2,
+        this.rand() < 0.5 ? "gold" : "blue",
+        0,
         rx,
         ry,
+        0.72,
       );
       f.leaderId = leader;
-      f.lag = 0.025 + this.rand() * 0.05;
-      f.omega *= 0.9 + this.rand() * 0.2;
+      f.lag = 0.035 + this.rand() * 0.05;
+      f.omega = this.fish[leader].omega;
       this.fish.push(f);
     }
   }
 
   private buildBlurFish(): void {
-    const rx = 0.46 * this.width;
-    const ry = 0.43 * this.height;
-    // near the camera on the left edge: one high, two low.
-    const thetas = [Math.PI - 0.7, Math.PI + 0.5, Math.PI - 0.1];
+    const rx = 0.44 * this.width;
+    const ry = 0.41 * this.height;
+    const thetas = [Math.PI - 0.6, Math.PI + 0.4, -0.4];
     this.blurFish = thetas.map((theta, i) =>
-      this.makeFish(i, "large", i === 1 ? "blue" : "gold", theta, rx, ry),
+      this.makeFish(i + 100, "large", i === 1 ? "blue" : "gold", theta, rx, ry, 1.7),
     );
   }
 
@@ -229,20 +189,20 @@ export class School {
     theta: number,
     rx: number,
     ry: number,
+    scale: number,
   ): Fish {
-    const profiles = PROFILES[kind];
-    const jitter = 0.92 + this.rand() * 0.16;
+    const jitter = 0.94 + this.rand() * 0.12;
     return {
       id,
       kind,
       family,
       theta0: theta,
-      omega: OMEGA * (0.85 + this.rand() * 0.3),
+      omega: OMEGA * (0.9 + this.rand() * 0.2),
       rx: rx * jitter,
       ry: ry * jitter,
-      profile: profiles[Math.floor(this.rand() * profiles.length)],
+      scale,
       phase: this.rand() * Math.PI * 2,
-      sparklePeriod: 2.0 + this.rand() * 1.5,
+      sparklePeriod: 2.6 + this.rand() * 1.4,
       leaderId: -1,
       lag: 0,
     };
@@ -273,7 +233,7 @@ export class School {
     }
   }
 
-  /** paint the school at time t (seconds). pure in t; dt is not needed. */
+  /** paint the school at time t in seconds. */
   update(t: number): void {
     this.ensurePool();
     this.cellCount = 0;
@@ -283,134 +243,149 @@ export class School {
     for (const f of this.blurFish) this.emitBlurFish(f, t);
   }
 
-  private bodyCellCount(f: Fish): number {
-    return f.profile.reduce((sum, w) => sum + w, 0);
-  }
-
   private emitFish(f: Fish, t: number): void {
-    const head = this.positionAt(f, t, true);
+    const center = this.positionAt(f, t, true);
     const theta = this.leaderThetaAt(f, t);
+
+    // forward tangent along travel path; lateral is normal to path.
     const vx = Math.sin(theta) * f.rx;
     const vy = -Math.cos(theta) * f.ry;
     const speed = Math.hypot(vx, vy) || 1;
-    // forward points along the travel direction; body rows run backwards.
     const fx = vx / speed;
     const fy = vy / speed;
     const lx = -fy;
     const ly = fx;
 
+    const s = f.scale;
     const isGold = f.family === "gold";
-    const tile = isGold ? GOLD_TILE : BLUE_TILE;
-    const glyph = isGold ? GOLD_GLYPH : BLUE_GLYPH;
-    const bodyTileScale = f.kind === "small" ? 0.75 : 1;
-    const flex = Math.sin(t * 0.6 + f.phase) < -0.5;
+    const tilePalette = isGold ? GOLD_TILES : BLUE_TILES;
+    const glyphColor = isGold ? GOLD_GLYPH : BLUE_GLYPH;
 
-    // sparkle: one cell flashes lavender near the middle of each cycle.
-    const window_ = Math.floor(t / f.sparklePeriod);
-    const inWindow = (t % f.sparklePeriod) < 0.25;
+    const flap = Math.sin(t * 1.6 + f.phase);
+    const wag = Math.sin(t * 2.2 + f.phase) * 0.25;
+
+    // sparkle: one cell turns lavender near the cycle midpoint.
+    const windowIndex = Math.floor(t / f.sparklePeriod);
+    const inWindow = (t % f.sparklePeriod) < 0.28;
     const sparkleSlot = inWindow
-      ? Math.floor(hash01(f.id * 991 + 37, window_ * 17) * this.bodyCellCount(f))
+      ? Math.floor(hash01(f.id * 991 + 37, windowIndex * 17) * 28)
       : -1;
 
+    const headGx = Math.round(center.x / CELL);
+    const headGy = Math.round(center.y / CELL);
+
+    const box = Math.max(3, Math.ceil(5.5 * s));
     let slot = 0;
-    for (let row = 0; row < f.profile.length; row++) {
-      let width = f.profile[row];
-      // the trailing rows flex on/off with the undulation.
-      if (flex && row >= f.profile.length - 2 && width > 1) width -= 1;
-      const back = row * CELL;
-      const center = (width - 1) / 2;
-      for (let col = 0; col < width; col++) {
-        const px = head.x - fx * back + lx * (col - center) * CELL;
-        const py = head.y - fy * back + ly * (col - center) * CELL;
-        const edge = row === 0 || row === f.profile.length - 1 || col === 0 || col === width - 1;
-        const jitter = 0.85 + hash01(f.id * 97 + row, Math.floor(t * 4) * 31 + col) * 0.3;
-        const tileAlpha = (0.9 * jitter - (edge ? 0.1 : 0)) * bodyTileScale;
-        const sparkle = slot === sparkleSlot;
-        this.pushCell(
-          Math.round(px / CELL) * CELL,
-          Math.round(py / CELL) * CELL,
-          this.pickGlyph(f.id * 131 + slot, t),
-          sparkle ? SPARKLE_GLYPH : glyph,
-          tile,
-          Math.min(1, tileAlpha),
-          sparkle ? 1 : 0.7 + jitter * 0.3 * hash01(slot, Math.floor(t * 4)),
-          "body",
-        );
-        slot++;
-      }
-      // one fringe glyph past each row end, no tile.
-      for (const side of [-1, 1]) {
-        if (hash01(f.id * 57 + row, Math.floor(t * 2)) < 0.35) {
-          const fx2 = head.x - fx * back + lx * (center + side * (width + 1) / 2) * CELL;
-          const fy2 = head.y - fy * back + ly * (center + side * (width + 1) / 2) * CELL;
+    const occupied = new Set<string>();
+
+    for (let dy = -box; dy <= box; dy++) {
+      for (let dx = -box; dx <= box; dx++) {
+        const u = (dx * fx + dy * fy) / s;
+        const v = Math.abs(dx * lx + dy * ly) / s;
+
+        let isBody = false;
+
+        // cephalic horns at front of ray.
+        if (u >= 1.2 && u <= 1.95 && v >= 0.35 && v <= 1.15) {
+          isBody = true;
+        } else if (u >= -2.4 && u < 1.2) {
+          // main body and broad wings.
+          if (v <= 0.85) {
+            isBody = true;
+          } else if (u >= -0.2) {
+            const edge = 0.85 + (1.2 - u) * 1.8;
+            if (v <= edge) isBody = true;
+          } else {
+            const taper = Math.pow((u - (-2.4)) / 2.2, 0.85);
+            const edge = 0.85 + 2.7 * (1.0 + flap * 0.18) * taper;
+            if (v <= edge) isBody = true;
+          }
+        } else if (u >= -3.6 && u < -2.4) {
+          // slender tail at rear.
+          const lateralOffset = (dx * lx + dy * ly) / s;
+          if (Math.abs(lateralOffset - wag) <= 0.55) {
+            isBody = true;
+          }
+        }
+
+        const gx = headGx + dx;
+        const gy = headGy + dy;
+        const key = `${gx},${gy}`;
+
+        if (isBody) {
+          occupied.add(key);
+          const sparkle = slot === sparkleSlot;
+          const nuance = tilePalette[Math.floor(hash01(f.id * 89 + slot, 31) * tilePalette.length)];
+          const tile = sparkle ? SPARKLE_TILE : nuance;
+          const glyph = sparkle ? SPARKLE_GLYPH : glyphColor;
+
           this.pushCell(
-            Math.round(fx2 / CELL) * CELL,
-            Math.round(fy2 / CELL) * CELL,
-            this.pickWakeGlyph(f.id * 211 + row, t),
-            FRINGE_COLOR,
-            "",
-            0,
-            0.6,
-            "fringe",
+            gx * CELL,
+            gy * CELL,
+            this.pickGlyph(f.id * 131 + slot, t),
+            glyph,
+            tile,
+            1.0,
+            "body",
           );
+          slot++;
+        } else if (v > 1.2 && v < 3.8 && u > -2.2 && u < 1.0) {
+          // occasional fringe glyph at wing edge without tile.
+          if (hash01(f.id * 57 + dx * 13 + dy, Math.floor(t * 2)) < 0.28) {
+            occupied.add(key);
+            this.pushCell(
+              gx * CELL,
+              gy * CELL,
+              this.pickWakeGlyph(f.id * 211 + slot, t),
+              WAKE_GLYPH_COLOR,
+              "",
+              0.55,
+              "fringe",
+            );
+            slot++;
+          }
         }
       }
     }
 
-    // the tail: attached to the body and wags with the sway. without it
-    // the shape reads as a blob instead of a fish.
-    const tailRows = f.kind === "small" ? [1] : [2, 1];
-    for (let r = 0; r < tailRows.length; r++) {
-      const width = tailRows[r];
-      const back = (f.profile.length + r) * CELL;
-      const wag = Math.sin(t * 1.2 + f.phase) * 1.6;
-      const center = (width - 1) / 2;
-      for (let col = 0; col < width; col++) {
-        const px = head.x - fx * back + lx * ((col - center) + wag) * CELL;
-        const py = head.y - fy * back + ly * ((col - center) + wag) * CELL;
-        const sparkle = slot === sparkleSlot;
-        this.pushCell(
-          Math.round(px / CELL) * CELL,
-          Math.round(py / CELL) * CELL,
-          this.pickGlyph(f.id * 131 + slot, t),
-          sparkle ? SPARKLE_GLYPH : glyph,
-          tile,
-          sparkle ? 0.8 : Math.max(0.55, bodyTileScale * 0.72),
-          sparkle ? 1 : 0.75,
-          "body",
-        );
-        slot++;
+    // emit wake trail along past path.
+    if (f.kind !== "small") {
+      for (let i = 1; i <= WAKE_STEPS; i++) {
+        const age = i * WAKE_STEP_SECONDS;
+        const past = this.positionAt(f, t - age, true);
+        const pastTheta = this.leaderThetaAt(f, t - age);
+        const pvx = Math.sin(pastTheta) * f.rx;
+        const pvy = -Math.cos(pastTheta) * f.ry;
+        const pSpeed = Math.hypot(pvx, pvy) || 1;
+        const pfx = pvx / pSpeed;
+        const pfy = pvy / pSpeed;
+
+        const tailX = past.x - pfx * (3.0 * s * CELL);
+        const tailY = past.y - pfy * (3.0 * s * CELL);
+        const wgx = Math.round(tailX / CELL);
+        const wgy = Math.round(tailY / CELL);
+        const wkey = `${wgx},${wgy}`;
+
+        if (!occupied.has(wkey)) {
+          occupied.add(wkey);
+          const trail = i / WAKE_STEPS;
+          this.pushCell(
+            wgx * CELL,
+            wgy * CELL,
+            this.pickWakeGlyph(f.id * 611 + i, t),
+            WAKE_GLYPH_COLOR,
+            "",
+            0,
+            0.65 * (1 - trail),
+            "wake",
+          );
+        }
       }
-    }
-
-    this.emitWake(f, t);
-  }
-
-  private emitWake(f: Fish, t: number): void {
-    if (f.kind === "small") return;
-    for (let i = 1; i <= WAKE_STEPS; i++) {
-      const age = i * WAKE_STEP_SECONDS;
-      const p = this.positionAt(f, t - age, true);
-      const trail = i / WAKE_STEPS;
-      const prob = 0.7 * (1 - trail);
-      if (hash01(f.id * 313 + i, Math.floor(t * 4)) >= prob) continue;
-      const jx = (hash01(f.id * 417 + i, Math.floor(t * 2)) - 0.5) * 1.6 * CELL;
-      const jy = (hash01(f.id * 521 + i, Math.floor(t * 2) + 7) - 0.5) * 1.6 * CELL;
-      this.pushCell(
-        Math.round((p.x + jx) / CELL) * CELL,
-        Math.round((p.y + jy) / CELL) * CELL,
-        this.pickWakeGlyph(f.id * 611 + i, t),
-        FRINGE_COLOR,
-        "",
-        0,
-        0.6 * (1 - trail),
-        "wake",
-      );
     }
   }
 
   private emitBlurFish(f: Fish, t: number): void {
-    const head = this.positionAt(f, t, true);
+    const center = this.positionAt(f, t, true);
     const theta = this.thetaAt(f, t);
     const vx = Math.sin(theta) * f.rx;
     const vy = -Math.cos(theta) * f.ry;
@@ -420,20 +395,20 @@ export class School {
     const lx = -fy;
     const ly = fx;
 
-    // out-of-focus bodies read about 1.35 times larger than sharp ones.
-    const scale = 1.35;
-    let slot = 0;
-    for (let row = 0; row < f.profile.length; row++) {
-      const width = f.profile[row];
-      const back = row * CELL * scale;
-      const center = (width - 1) / 2;
-      for (let col = 0; col < width; col++) {
-        const px = head.x - fx * back + lx * (col - center) * CELL * scale;
-        const py = head.y - fy * back + ly * (col - center) * CELL * scale;
-        const depth = 1 - row / f.profile.length;
-        const cellColor = mixHex(BLUR_MID, BLUR_PEAK, 0.35 + hash01(slot, row) * 0.65 * depth);
-        this.pushBlurCell(px, py, cellColor);
-        slot++;
+    const s = f.scale;
+    const box = Math.max(3, Math.ceil(4.0 * s));
+    const headGx = Math.round(center.x / CELL);
+    const headGy = Math.round(center.y / CELL);
+
+    for (let dy = -box; dy <= box; dy += 2) {
+      for (let dx = -box; dx <= box; dx += 2) {
+        const u = (dx * fx + dy * fy) / s;
+        const v = Math.abs(dx * lx + dy * ly) / s;
+        if (u >= -2.0 && u <= 1.2 && v <= 1.8) {
+          const px = (headGx + dx) * CELL;
+          const py = (headGy + dy) * CELL;
+          this.pushBlurCell(px, py, BLUR_COLOR);
+        }
       }
     }
   }
@@ -448,25 +423,20 @@ export class School {
     alpha: number,
     kind: CellKind,
   ): void {
+    if (this.cellCount >= this.cells.length) return;
     const c = this.cells[this.cellCount];
     c.x = x;
     c.y = y;
     c.glyph = glyph;
     c.glyphColor = glyphColor;
+    c.tileColor = tileColor;
     c.alpha = alpha;
     c.kind = kind;
-    if (kind !== "body") {
-      // fringe and wake glyphs draw without a tile.
-      c.tileColor = "";
-    } else {
-      // the renderer composes the tile over the dark app background,
-      // so the tile alpha is baked into its color instead.
-      c.tileColor = tileAlpha > 0 ? mixHex("#0a0b10", tileColor, Math.min(1, tileAlpha)) : "";
-    }
     this.cellCount++;
   }
 
   private pushBlurCell(x: number, y: number, color: string): void {
+    if (this.blurCellCount >= this.blurCells.length) return;
     const c = this.blurCells[this.blurCellCount];
     c.x = x;
     c.y = y;
@@ -478,13 +448,14 @@ export class School {
     this.blurCellCount++;
   }
 
-  /** body glyph that re-rolls at about 4 hz; 30 percent of cells hold a second. */
+  /** pick a body glyph that re-rolls at about 3 hz. */
   private pickGlyph(seed: number, t: number): string {
-    const bucket = hash01(seed + 7, Math.floor(t * 1)) < 0.3 ? Math.floor(t) : Math.floor(t * 4);
-    return BODY_GLYPHS[Math.floor(hash01(seed, bucket) * BODY_GLYPHS.length)];
+    const hold = hash01(seed + 7, Math.floor(t * 1.5)) < 0.4;
+    const step = hold ? Math.floor(t * 1.5) : Math.floor(t * 3.5);
+    return BODY_GLYPHS[Math.floor(hash01(seed, step) * BODY_GLYPHS.length)];
   }
 
   private pickWakeGlyph(seed: number, t: number): string {
-    return WAKE_GLYPHS[Math.floor(hash01(seed, Math.floor(t * 4)) * WAKE_GLYPHS.length)];
+    return WAKE_GLYPHS[Math.floor(hash01(seed, Math.floor(t * 2)) * WAKE_GLYPHS.length)];
   }
 }

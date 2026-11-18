@@ -2,13 +2,11 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
-import { School, CELL } from "./fish";
+import { School, CELL, BODY_GLYPHS, WAKE_GLYPHS } from "./fish";
 
 const MAX_CELLS = 2400;
-const BODY_GLYPHS = ["%", "8", "#", "X", "@", "S"];
-const WAKE_GLYPHS = ["t", "o", ":", ";", ".", "'"];
 const ATLAS_CHARS = [...BODY_GLYPHS, ...WAKE_GLYPHS];
-const ATLAS_CELL = 24;
+const ATLAS_CELL = 48;
 
 /** draws the glyph atlas from the loaded mono font. */
 function buildAtlas(): THREE.CanvasTexture {
@@ -19,7 +17,7 @@ function buildAtlas(): THREE.CanvasTexture {
   if (ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#ffffff";
-    ctx.font = '13px "JetBrains Mono", monospace';
+    ctx.font = '600 28px "JetBrains Mono", monospace';
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ATLAS_CHARS.forEach((ch, i) => {
@@ -50,6 +48,37 @@ function buildSprite(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
+const tileVertex = `
+attribute vec3 aTileColor;
+attribute float aTileAlpha;
+varying vec2 vUv;
+varying vec3 vTileColor;
+varying float vTileAlpha;
+void main() {
+  vUv = uv;
+  vTileColor = aTileColor;
+  vTileAlpha = aTileAlpha;
+  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+}
+`;
+
+const tileFragment = `
+varying vec2 vUv;
+varying vec3 vTileColor;
+varying float vTileAlpha;
+void main() {
+  if (vTileAlpha < 0.01) discard;
+  // rounded rectangle on 14px quad: 12.6px tile, 2.0px corner radius
+  vec2 p = abs(vUv - 0.5) * 14.0;
+  vec2 b = vec2(6.3, 6.3) - 2.0;
+  vec2 q = p - b;
+  float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 2.0;
+  float alpha = clamp(0.5 - d, 0.0, 1.0) * vTileAlpha;
+  if (alpha < 0.01) discard;
+  gl_FragColor = vec4(vTileColor, alpha);
+}
+`;
+
 const glyphVertex = `
 attribute float aGlyph;
 attribute float aAlpha;
@@ -74,7 +103,7 @@ varying vec3 vColor;
 void main() {
   vec4 tex = texture2D(uAtlas, vUv);
   float alpha = tex.a * vAlpha;
-  if (alpha < 0.01) discard;
+  if (alpha < 0.02) discard;
   gl_FragColor = vec4(vColor, alpha);
 }
 `;
@@ -149,12 +178,23 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
   }, []);
 
   const tileMesh = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(CELL - 1, CELL - 1);
-    const mat = new THREE.MeshBasicMaterial({ transparent: true });
+    const geo = new THREE.PlaneGeometry(CELL, CELL);
+    const tileColorAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_CELLS * 3), 3);
+    const tileAlphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_CELLS), 1);
+    tileColorAttr.setUsage(THREE.DynamicDrawUsage);
+    tileAlphaAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute("aTileColor", tileColorAttr);
+    geo.setAttribute("aTileAlpha", tileAlphaAttr);
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: tileVertex,
+      fragmentShader: tileFragment,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    });
     const mesh = new THREE.InstancedMesh(geo, mat, MAX_CELLS);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.frustumCulled = false;
-    for (let i = 0; i < MAX_CELLS; i++) mesh.setColorAt(i, new THREE.Color("#000000"));
     return mesh;
   }, []);
 
@@ -189,6 +229,7 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
   const scratch = useMemo(() => ({
     matrix: new THREE.Matrix4(),
     color: new THREE.Color(),
+    tileColor: new THREE.Color(),
   }), []);
 
   const drawn = useRef(false);
@@ -196,7 +237,6 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
   useFrame((state) => {
     if (reducedMotion && drawn.current) return;
     if (document.hidden) return;
-    // the school is a pure function of the wall clock.
     const t = reducedMotion ? 0 : state.clock.elapsedTime;
     school.update(t);
     drawn.current = true;
@@ -204,22 +244,10 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
     const n = school.cellCount;
     const dummy = scratch.matrix;
     const color = scratch.color;
+    const tileColor = scratch.tileColor;
 
-    for (let i = 0; i < n; i++) {
-      const cell = school.cells[i];
-      const x = cell.x + CELL / 2 - width / 2;
-      const y = -(cell.y + CELL / 2) + height / 2;
-      if (cell.tileColor) {
-        dummy.makeTranslation(x, y, 0);
-      } else {
-        dummy.makeScale(0, 0, 0);
-      }
-      tileMesh.setMatrixAt(i, dummy);
-      tileMesh.setColorAt(i, color.set(cell.tileColor || "#000000"));
-    }
-    tileMesh.count = n;
-    tileMesh.instanceMatrix.needsUpdate = true;
-    if (tileMesh.instanceColor) tileMesh.instanceColor.needsUpdate = true;
+    const tileColorAttr = tileMesh.geometry.getAttribute("aTileColor") as THREE.InstancedBufferAttribute;
+    const tileAlphaAttr = tileMesh.geometry.getAttribute("aTileAlpha") as THREE.InstancedBufferAttribute;
 
     const glyphIndexAttr = glyphMesh.geometry.getAttribute("aGlyph") as THREE.InstancedBufferAttribute;
     const alphaAttr = glyphMesh.geometry.getAttribute("aAlpha") as THREE.InstancedBufferAttribute;
@@ -230,12 +258,28 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
       const x = cell.x + CELL / 2 - width / 2;
       const y = -(cell.y + CELL / 2) + height / 2;
       dummy.makeTranslation(x, y, 0);
+
+      tileMesh.setMatrixAt(i, dummy);
+      if (cell.tileColor) {
+        tileColor.set(cell.tileColor);
+        tileColorAttr.setXYZ(i, tileColor.r, tileColor.g, tileColor.b);
+        tileAlphaAttr.setX(i, 1.0);
+      } else {
+        tileAlphaAttr.setX(i, 0.0);
+      }
+
       glyphMesh.setMatrixAt(i, dummy);
       glyphIndexAttr.setX(i, Math.max(0, ATLAS_CHARS.indexOf(cell.glyph)));
       alphaAttr.setX(i, cell.alpha);
       color.set(cell.glyphColor);
       colorAttr.setXYZ(i, color.r, color.g, color.b);
     }
+
+    tileMesh.count = n;
+    tileMesh.instanceMatrix.needsUpdate = true;
+    tileColorAttr.needsUpdate = true;
+    tileAlphaAttr.needsUpdate = true;
+
     glyphMesh.count = n;
     glyphMesh.instanceMatrix.needsUpdate = true;
     glyphIndexAttr.needsUpdate = true;
@@ -254,7 +298,7 @@ function SharpFish({ school, width, height, reducedMotion }: LayerProps) {
 function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
   const sprite = useMemo(() => buildSprite(), []);
   const mesh = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(CELL * 2.6, CELL * 2.6);
+    const geo = new THREE.PlaneGeometry(CELL * 2.8, CELL * 2.8);
     const mat = new THREE.MeshBasicMaterial({
       map: sprite,
       transparent: true,
@@ -265,7 +309,7 @@ function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
     const instanced = new THREE.InstancedMesh(geo, mat, MAX_CELLS);
     instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     instanced.frustumCulled = false;
-    for (let i = 0; i < MAX_CELLS; i++) instanced.setColorAt(i, new THREE.Color("#252530"));
+    for (let i = 0; i < MAX_CELLS; i++) instanced.setColorAt(i, new THREE.Color("#3c4156"));
     return instanced;
   }, [sprite]);
 
@@ -278,8 +322,6 @@ function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
   useFrame(() => {
     if (reducedMotion && drawn.current) return;
     if (document.hidden) return;
-    // the sharp layer advances the school; this layer paints what it got.
-    // t=0 cells are populated in the constructor, so the first frame paints.
     drawn.current = true;
 
     const n = school.blurCellCount;
@@ -300,4 +342,3 @@ function BlurFish({ school, width, height, reducedMotion }: LayerProps) {
 
   return <primitive object={mesh} />;
 }
-
