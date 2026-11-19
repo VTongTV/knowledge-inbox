@@ -5,7 +5,7 @@ const PHRASES = [
   "clear the inbox backlog",
   "find the calm in this week",
   "chart tomorrow’s course",
-  "skim the weekly thread",
+  "skim the saved pages",
 ];
 
 const PHRASE_SECONDS = 5;

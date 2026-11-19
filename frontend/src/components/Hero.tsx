@@ -33,6 +33,14 @@ export function Hero({ messages, asking, onAsk, onIngest }: HeroProps) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, asking]);
 
+  function insertCommand(template: string) {
+    setDraft((cur) => (cur.trim() ? `${cur.trim()} ${template}` : template));
+    const el = document.getElementById("composer-input");
+    if (el instanceof HTMLTextAreaElement) {
+      el.focus();
+    }
+  }
+
   return (
     <>
       <div className="hero">
@@ -101,7 +109,7 @@ export function Hero({ messages, asking, onAsk, onIngest }: HeroProps) {
           onIngest={onIngest}
         />
 
-        {pristine ? <CommandChips onInsert={(text) => setDraft((cur) => cur + text)} /> : null}
+        {pristine ? <CommandChips onInsert={insertCommand} /> : null}
       </div>
       <FooterNote />
     </>
