@@ -54,16 +54,20 @@ Open the URL Vite prints, by default `http://localhost:5173`.
 
 | Route | Body | Returns |
 |---|---|---|
-| `POST /ingest` | `{"type": "note"\|"url", "content": "..."}` | The saved item with its id and chunk count |
-| `GET /items` | — | Every item with a preview and a chunk count |
-| `POST /query` | `{"question": "..."}` | `{"answer": "...", "sources": [{item_id, chunk_index, text, score}]}` |
+| `POST /ingest` | `{"type": "note"\|"url", "content": "..."}` | `202` with `{"id", "status": "pending"}`; the client polls `GET /items` until the item's chunk count is above zero |
+| `GET /items` | - | Every item with a preview and a chunk count |
+| `POST /query` | `{"question": "..."}` | `{"answer": "...", "sources": [{item_id, chunk_index, text, score, verified}]}` |
 
-Status codes: `200` success, `400` the content held no text, `422` the request body failed validation, `502` the page fetch or the LLM call failed. The detail string names the cause.
+Status codes: `202` ingest accepted (embedding runs in the background), `200` success, `400` the content held no text, `422` the request body failed validation, `502` the page fetch or the LLM call failed. The detail string names the cause.
 
 ## Design choices
 
 - **Chunking:** sentences, grouped to about 400 characters, with a 60-character overlap between neighbors. A chunk therefore never cuts a sentence, and a thought that spans a boundary stays in both chunks.
-- **Vector store:** sqlite. Each chunk keeps its embedding as JSON. Search loads every vector and scores with numpy cosine. No second database, no new service, no extension to compile.
+- **Vector store:** sqlite. Each chunk keeps its embedding as JSON. Search loads every vector and scores with numpy cosine. No second database, no new service, no extension to compile. The `chunks_fts` virtual table (FTS5) mirrors chunk text for the keyword leg.
+- **Hybrid retrieval:** `BM25` keyword ranking (FTS5) and the cosine vector ranking fuse with reciprocal rank fusion (k=60). Chunks that only match by keywords rise; chunks that only match semantically stay. Falls back to vector-only when FTS5 is unavailable.
+- **Rerank:** after fusion, the top 20 candidates are re-scored with a local ColBERTv2 late interaction model (`answerdotai/answerai-colbert-small-v1`, cached by fastembed). If the model fails to load, the fused order is kept. `RERANK_ENABLED=false` switches the reranker off.
+- **Evidence-based cutoff:** chunks with a cosine score below `MIN_CHUNK_SCORE` (default 0.45) never reach the prompt. If nothing survives, the answer says the saved content does not cover the question and the LLM is not called.
+- **Citation verification:** every `[n]` in the answer is checked against the sentence it sits in; a source sharing fewer than two significant tokens with that sentence is marked `verified: false` and a warning is logged. The response carries `verified` per source.
 - **What breaks at scale:** search cost grows with the chunk count, because every query scans the full table. Past fifty thousand chunks, move to a vector index (sqlite-vec, pgvector, or a dedicated store). The store also serializes writes behind one lock; a second app process needs a database that accepts concurrent connections.
 - **Production changes, in one line each:** run the fetch behind a job queue with retries; cache embeddings of identical text; stream the answer token by token; collect per-source feedback; move the key to a secret manager.
 
