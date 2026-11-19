@@ -1,4 +1,4 @@
-import { ArrowUpRight, Mic, Plus } from "lucide-react";
+import { ArrowUpRight, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 
@@ -14,45 +14,9 @@ interface ComposerProps {
   onIngest: (kind: ItemType, content: string) => Promise<{ chunks: number }>;
 }
 
-interface RecognitionResultItem {
-  transcript: string;
-}
-
-interface RecognitionResultList extends ArrayLike<ArrayLike<RecognitionResultItem>> {
-  length: number;
-}
-
-interface RecognitionEvent extends Event {
-  results: RecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionLike {
-  lang: string;
-  interimResults: boolean;
-  onresult: ((event: RecognitionEvent) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
-
-/** returns the browser speech constructor when it exists, else null. */
-function speechCtor(): SpeechRecognitionCtor | null {
-  const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionCtor;
-    webkitSpeechRecognition?: SpeechRecognitionCtor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
 export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerProps) {
-  const [listening, setListening] = useState(false);
   const [ingestOpen, setIngestOpen] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
-  const speech = speechCtor();
 
   // the textarea grows with the content, from one line to six.
   useEffect(() => {
@@ -61,10 +25,6 @@ export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerPro
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 190)}px`;
   }, [value]);
-
-  useEffect(() => {
-    return () => recognitionRef.current?.stop();
-  }, []);
 
   function submit() {
     const question = value.trim();
@@ -83,29 +43,6 @@ export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerPro
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     submit();
-  }
-
-  // fill the textarea with heard speech when the browser can listen.
-  function toggleMic() {
-    if (!speech) return;
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-    const rec = new speech();
-    rec.lang = "en-US";
-    rec.interimResults = true;
-    rec.onresult = (event) => {
-      let said = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        said += event.results[i][0].transcript;
-      }
-      onChange(said);
-    };
-    rec.onend = () => setListening(false);
-    recognitionRef.current = rec;
-    setListening(true);
-    rec.start();
   }
 
   return (
@@ -134,17 +71,6 @@ export function Composer({ value, onChange, busy, onAsk, onIngest }: ComposerPro
             <IngestPanel onIngest={onIngest} onSaved={() => setIngestOpen(false)} />
           </PopoverContent>
         </Popover>
-
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label={speech ? (listening ? "Stop dictation" : "Start dictation") : "Voice input unavailable in this browser"}
-          aria-pressed={listening}
-          disabled={!speech}
-          onClick={toggleMic}
-        >
-          <Mic size={18} strokeWidth={1.75} aria-hidden />
-        </button>
 
         <span className="hint">↵ ask · ⇧↵ new line</span>
 
