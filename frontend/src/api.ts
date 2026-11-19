@@ -28,6 +28,7 @@ export interface IngestedRow {
   source: string
   created_at: string
   chunks: number
+  status?: string
 }
 
 /** one row of GET /items, where preview holds the first characters of the content. */

@@ -15,6 +15,9 @@ import {
 } from "./api";
 import type { IngestedRow, ItemType, SavedItem } from "./api";
 
+const POLL_INTERVAL_MS = 500;
+const POLL_MAX_ATTEMPTS = 60;
+
 /** asks one question, appends the user line and the answer to the thread. */
 export default function App() {
   const [items, setItems] = useState<SavedItem[] | null>(null);
@@ -55,6 +58,24 @@ export default function App() {
     void loadItems(controller.signal);
     return () => controller.abort();
   }, [loadItems]);
+
+  // poll /items until the background embed lands its chunks on the target item
+  const pollChunks = useCallback(async (itemId: number): Promise<boolean> => {
+    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+      await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS));
+      try {
+        const rows = await fetchItems();
+        const found = rows.find((item) => item.id === itemId);
+        if (found && found.chunk_count > 0) {
+          setItems(rows);
+          return true;
+        }
+      } catch {
+        // a transient list failure does not abort the poll
+      }
+    }
+    return false;
+  }, []);
 
   const showToast = useCallback((text: string) => {
     setToast(text);
@@ -105,8 +126,12 @@ export default function App() {
   const ingest = useCallback(
     async (kind: ItemType, content: string): Promise<IngestedRow> => {
       const row = await ingestNoteOrUrl(kind, content);
-      showToast("Saved to Logbook");
-      void loadItems();
+      showToast("Saving…");
+      void (async () => {
+        const ready = await pollChunks(row.id);
+        showToast(ready ? "Saved to Logbook" : "Saving failed — the page could not be processed");
+        void loadItems();
+      })();
       return row;
     },
     [loadItems, showToast],
