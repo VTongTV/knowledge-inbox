@@ -36,7 +36,7 @@ def _ingest_note(client: TestClient) -> dict[str, Any]:
     response = client.post(
         "/ingest", json={"type": "note", "content": "sqlite stores chunks. cosine sorts them."}
     )
-    assert response.status_code == 200, response.text
+    assert response.status_code == 202, response.text
     return response.json()
 
 
@@ -53,10 +53,11 @@ def test_ingest_note_round_trip(tmp_path: Any, monkeypatch: Any) -> None:
         body = _ingest_note(client)
         assert body["type"] == "note"
         assert body["source"] == ""
-        assert body["chunks"] >= 1
+        assert body["chunks"] == 0
+        assert body["status"] == "pending"
         items = client.get("/items").json()
         assert items[0]["id"] == body["id"]
-        assert items[0]["chunk_count"] == body["chunks"]
+        assert items[0]["chunk_count"] == 1
         assert items[0]["preview"]
 
 
@@ -97,7 +98,7 @@ def test_ingest_url_happy_path(tmp_path: Any, monkeypatch: Any) -> None:
         response = client.post(
             "/ingest", json={"type": "url", "content": "https://example.com/a"}
         )
-        assert response.status_code == 200, response.text
+        assert response.status_code == 202, response.text
         body = response.json()
         assert body["type"] == "url"
         assert body["source"] == "https://example.com/a"
@@ -175,3 +176,5 @@ def test_query_llm_failure_gives_502(tmp_path: Any, monkeypatch: Any) -> None:
         response = client.post("/query", json={"question": "what stores the chunks?"})
         assert response.status_code == 502
         assert "OPENROUTER_API_KEY" in response.json()["detail"]
+
+

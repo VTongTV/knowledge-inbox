@@ -8,7 +8,7 @@ from functools import partial
 from typing import AsyncIterator, Literal
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -86,9 +86,9 @@ def create_app(startup_settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.post("/ingest")
-    def ingest(body: IngestRequest, request: Request) -> dict[str, object]:
-        """chunk, embed, and store a note or a fetched url page"""
+    @app.post("/ingest", status_code=202)
+    def ingest(body: IngestRequest, request: Request, background_tasks: BackgroundTasks) -> dict[str, object]:
+        """fetch and validate now; embed and store the item in the background"""
         store: Store = request.app.state.store
         app_settings: Settings = request.app.state.settings
         if body.type == "url":
@@ -111,20 +111,20 @@ def create_app(startup_settings: Settings | None = None) -> FastAPI:
         if not chunks:
             logger.warning("ingest held no text: type=%s", body.type)
             raise HTTPException(status_code=400, detail="content held no text to index")
-        logger.info("ingest: %d chunks for type=%s", len(chunks), body.type)
-        vectors = embed(chunks, model_name=app_settings.embed_model)
+        logger.info("ingest: %d chunks for type=%s, embed deferred", len(chunks), body.type)
         try:
-            item_id = store.add_item(body.type, raw, source, chunks, vectors)
+            item = store.add_item_shell(body.type, raw, source)
         except StoreError as exc:
-            logger.error("ingest store write failed: %s", exc)
+            logger.error("ingest shell write failed: %s", exc)
             raise HTTPException(status_code=500, detail=f"store write failed: {exc}") from exc
-        item = _require_item(store, item_id)
+        background_tasks.add_task(_embed_and_store_item, store, app_settings, item["id"], chunks)
         return {
             "id": item["id"],
             "type": item["type"],
             "source": item["source"],
             "created_at": item["created_at"],
-            "chunks": item["chunk_count"],
+            "chunks": 0,
+            "status": "pending",
         }
 
     @app.get("/items")
@@ -152,13 +152,22 @@ def create_app(startup_settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def _require_item(store: Store, item_id: int) -> dict[str, object]:
-    """read one item back, or fail the request when the read misses"""
-    item = store.get_item(item_id)
-    if item is None:
-        logger.error("item %d vanished after insert", item_id)
-        raise HTTPException(status_code=500, detail="store lost the saved item")
-    return item
+def _embed_and_store_item(store: Store, app_settings: Settings, item_id: int, chunks: list[str]) -> None:
+    """embed the chunk texts and attach them to the shell item"""
+    try:
+        vectors = embed(chunks, model_name=app_settings.embed_model)
+        store.add_item_chunks(item_id, chunks, vectors)
+    except Exception as exc:
+        logger.error(
+            "background embed failed for item %d: %s; deleting the shell item", item_id, exc
+        )
+        try:
+            store.delete_item(item_id)
+        except StoreError as cleanup_exc:
+            logger.error("cleanup for item %d failed: %s", item_id, cleanup_exc)
+
+
+
 
 
 _configure_logging()

@@ -64,7 +64,7 @@ class _CountingLlm:
 def test_retrieve_returns_store_hits(tmp_path: Any) -> None:
     """retrieve embeds the question and returns the store search results"""
     store = _seeded_store(tmp_path)
-    settings = _settings()
+    settings = _settings(min_chunk_score=0.0, rerank_enabled=False)
     hits = retrieve("question", store, settings, embed_fn=lambda texts: [_vec()])
     store.close()
     assert len(hits) == 2
@@ -78,7 +78,7 @@ def test_answer_pairs_the_llm_text_with_sources(tmp_path: Any) -> None:
     result = answer(
         "question",
         store,
-        _settings(top_k=2),
+        _settings(top_k=2, min_chunk_score=0.0, rerank_enabled=False),
         embed_fn=lambda texts: [_vec()],
         llm_fn=_llm_ok,
     )
@@ -171,3 +171,65 @@ def test_extract_content_rejects_empty_choices() -> None:
         _extract_content({"choices": [{"message": {"content": "  "}}]})
     with pytest.raises(LLMError):
         _extract_content({"choices": [{"message": None}]})
+
+
+
+def test_retrieve_cutoff_drops_weak_hits(tmp_path: Any) -> None:
+    """a chunk under the score cutoff never reaches the prompt"""
+    store = _seeded_store(tmp_path)
+    settings = _settings(min_chunk_score=0.45)
+    hits = retrieve("question", store, settings, embed_fn=lambda texts: [_vec()])
+    store.close()
+    assert len(hits) == 1
+    assert hits[0]["text"] == "the answer text"
+
+
+def test_retrieve_rerank_reorders_sources(tmp_path: Any, monkeypatch: Any) -> None:
+    """the rerank order wins over the fused order"""
+    store = _seeded_store(tmp_path)
+    settings = _settings(min_chunk_score=0.0)
+    monkeypatch.setattr(
+        "app.rag.rerank",
+        lambda question, passages, model_name=None: [0.0, 10.0],
+    )
+    hits = retrieve("question", store, settings, embed_fn=lambda texts: [_vec()])
+    store.close()
+    assert [hit["text"] for hit in hits] == ["off topic", "the answer text"]
+
+
+def test_cutoff_empties_sources_and_skips_the_llm(tmp_path: Any) -> None:
+    """all hits below the cutoff returns guidance without an llm call"""
+    store = _seeded_store(tmp_path)
+    llm = _CountingLlm()
+    result = answer(
+        "question",
+        store,
+        _settings(min_chunk_score=2.0),
+        embed_fn=lambda texts: [_vec()],
+        llm_fn=llm,
+    )
+    store.close()
+    from app.rag import NO_MATCH_ANSWER
+
+    assert result["answer"] == NO_MATCH_ANSWER
+    assert result["sources"] == []
+    assert llm.calls == 0
+
+
+def test_verify_citations_marks_true_and_false_claims(tmp_path: Any) -> None:
+    """claims whose window shares significant tokens verify; strays do not"""
+    from app.rag import verify_citations
+
+    sources = [
+        {"item_id": 1, "chunk_index": 0, "text": "the answer text describes stores", "score": 0.9},
+        {"item_id": 1, "chunk_index": 1, "text": "quantum encryption details", "score": 0.8},
+    ]
+    answer_text = (
+        "per [1], the answer text describes stores. "
+        "nothing red beagle flying pigs here [2]."
+    )
+    marked = verify_citations(answer_text, [dict(source) for source in sources])
+    assert marked[0]["verified"] is True
+    assert marked[1]["verified"] is False
+
+

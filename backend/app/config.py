@@ -14,6 +14,14 @@ def _env(name: str, fallback: str) -> str:
     return value if value else fallback
 
 
+def _env_bool(name: str, fallback: bool) -> bool:
+    """return env name as a bool, or fallback when the value is empty"""
+    value = os.environ.get(name, "")
+    if not value:
+        return fallback
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     """every knob the app reads; no other module touches os.environ"""
@@ -30,6 +38,9 @@ class Settings:
     fetch_timeout: float
     llm_timeout: float
     cors_origins: list[str]
+    min_chunk_score: float
+    rerank_enabled: bool
+    rerank_model: str
 
 
 def load_settings() -> Settings:
@@ -47,4 +58,9 @@ def load_settings() -> Settings:
         fetch_timeout=float(_env("FETCH_TIMEOUT", "10")),
         llm_timeout=float(_env("LLM_TIMEOUT", "60")),
         cors_origins=_env("CORS_ORIGINS", "http://localhost:5173").split(","),
+        # a chunk must score at least this on the cosine leg to reach the prompt;
+        # the live corpus tests out around 0.64 for weak hits.
+        min_chunk_score=float(_env("MIN_CHUNK_SCORE", "0.45")),
+        rerank_enabled=_env_bool("RERANK_ENABLED", True),
+        rerank_model=_env("RERANK_MODEL", "answerdotai/answerai-colbert-small-v1"),
     )

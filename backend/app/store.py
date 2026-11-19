@@ -57,9 +57,68 @@ class Store:
             self._conn.row_factory = sqlite3.Row
             self._conn.executescript(SCHEMA)
             self._conn.commit()
+            self._fts_ok = self._init_fts()
         except sqlite3.Error as exc:
             raise StoreError(f"cannot open store at {db_path}: {exc}") from exc
         logger.info("store opened at %s", db_path)
+
+    def _init_fts(self) -> bool:
+        """create the keyword mirror; report when the build lacks fts5"""
+        try:
+            with self._lock:
+                self._conn.execute(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_text)"
+                )
+                self._conn.commit()
+                fts_count = self._conn.execute(
+                    "SELECT COUNT(*) AS n FROM chunks_fts"
+                ).fetchone()["n"]
+                chunk_count = self._conn.execute(
+                    "SELECT COUNT(*) AS n FROM chunks"
+                ).fetchone()["n"]
+                if fts_count != chunk_count:
+                    self._conn.execute("DELETE FROM chunks_fts")
+                    self._conn.execute(
+                        "INSERT INTO chunks_fts(rowid, chunk_text) SELECT id, text FROM chunks"
+                    )
+                    self._conn.commit()
+                    logger.info("backfilled the fts mirror with %d chunks", chunk_count)
+            return True
+        except sqlite3.Error as exc:
+            logger.warning(
+                "fts5 unavailable (%s); using vector search alone", exc
+            )
+            return False
+
+    def _fts_chunk_ids(self, query: str, limit: int) -> list[int]:
+        """best-effort keyword search; an empty match keeps the vector leg alone"""
+        if not self._fts_ok:
+            return []
+        words = [word for word in query.lower().split() if len(word) > 2]
+        if not words:
+            return []
+        match = " ".join('"' + word.replace('"', "") + '"' for word in words)
+        try:
+            with self._lock:
+                rows = self._conn.execute(
+                    "SELECT rowid, bm25(chunks_fts) AS rank FROM chunks_fts"
+                    " WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?",
+                    (match, limit),
+                ).fetchall()
+            return [int(row["rowid"]) for row in rows]
+        except sqlite3.Error as exc:
+            logger.warning(
+                "fts match failed (%s); using vector search alone", exc
+            )
+            return []
+
+    def _insert_fts_rows(self, rows: list[tuple[int, str]]) -> None:
+        """mirror one chunks insert into fts; caller holds the lock and the transaction"""
+        if not self._fts_ok:
+            return
+        self._conn.executemany(
+            "INSERT INTO chunks_fts(rowid, chunk_text) VALUES (?, ?)", rows
+        )
 
     def close(self) -> None:
         """close the connection; safe to call twice"""
@@ -112,12 +171,111 @@ class Store:
                     " VALUES (?, ?, ?, ?)",
                     rows,
                 )
+                chunk_ids = self._conn.execute(
+                    "SELECT id FROM chunks WHERE item_id = ? ORDER BY chunk_index",
+                    (item_id,),
+                ).fetchall()
+                self._insert_fts_rows(
+                    [(int(row["id"]), text) for row, text in zip(chunk_ids, chunk_texts)]
+                )
                 self._conn.commit()
         except sqlite3.Error as exc:
             self._conn.rollback()
             raise StoreError(f"write failed: {exc}") from exc
         logger.info("item %d stored with %d chunks", item_id, len(rows))
         return item_id
+
+    def add_item_shell(self, item_type: str, raw: str, source: str) -> dict[str, object]:
+        """insert the item row without chunks; return the api item dict"""
+        created_at = now_iso()
+        try:
+            with self._lock:
+                cursor = self._conn.cursor()
+                cursor.execute(
+                    "INSERT INTO items (type, raw, source, created_at) VALUES (?, ?, ?, ?)",
+                    (item_type, raw, source, created_at),
+                )
+                item_id = cursor.lastrowid
+                assert item_id is not None
+                self._conn.commit()
+        except sqlite3.Error as exc:
+            self._conn.rollback()
+            raise StoreError(f"shell write failed: {exc}") from exc
+        item = self.get_item(item_id)
+        if item is None:
+            logger.error("shell %d vanished right after insert", item_id)
+            raise StoreError(f"shell {item_id} vanished after insert")
+        logger.info("item %d created as an empty shell", item_id)
+        return item
+
+    def add_item_chunks(
+        self,
+        item_id: int,
+        chunk_texts: list[str],
+        embeddings: list[np.ndarray],
+    ) -> int:
+        """insert the chunks for a shell created by add_item_shell; return the count"""
+        if len(chunk_texts) != len(embeddings):
+            raise StoreError("chunk count and embedding count differ")
+        if not chunk_texts:
+            raise StoreError("an item needs at least one chunk")
+        row = self.get_item(item_id)
+        if row is None:
+            raise StoreError(f"shell item {item_id} does not exist")
+        try:
+            with self._lock:
+                cursor = self._conn.cursor()
+                rows = [
+                    (
+                        item_id,
+                        index,
+                        text,
+                        json.dumps(vec.astype(np.float32).tolist()),
+                    )
+                    for index, (text, vec) in enumerate(zip(chunk_texts, embeddings))
+                ]
+                cursor.executemany(
+                    "INSERT INTO chunks (item_id, chunk_index, text, embedding)"
+                    " VALUES (?, ?, ?, ?)",
+                    rows,
+                )
+                chunk_ids = self._conn.execute(
+                    "SELECT id FROM chunks WHERE item_id = ? ORDER BY chunk_index",
+                    (item_id,),
+                ).fetchall()
+                self._insert_fts_rows(
+                    [(int(row["id"]), text) for row, text in zip(chunk_ids, chunk_texts)]
+                )
+                self._conn.commit()
+        except sqlite3.Error as exc:
+            self._conn.rollback()
+            raise StoreError(f"chunk write failed for item {item_id}: {exc}") from exc
+        logger.info("item %d received %d chunks", item_id, len(rows))
+        return len(rows)
+
+    def delete_item(self, item_id: int) -> None:
+        """remove an item, its chunks and the keyword mirror; raise when missing"""
+        row = self.get_item(item_id)
+        if row is None:
+            raise StoreError(f"item {item_id} does not exist")
+        try:
+            with self._lock:
+                chunk_ids = self._conn.execute(
+                    "SELECT id FROM chunks WHERE item_id = ?", (item_id,)
+                ).fetchall()
+                if chunk_ids and self._fts_ok:
+                    placeholders = ", ".join("?" for _ in chunk_ids)
+                    self._conn.execute(
+                        f"DELETE FROM chunks_fts WHERE rowid IN ({placeholders})",
+                        tuple(int(row["id"]) for row in chunk_ids),
+                    )
+                self._conn.execute("DELETE FROM chunks WHERE item_id = ?", (item_id,))
+                self._conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+                self._conn.commit()
+        except sqlite3.Error as exc:
+            self._conn.rollback()
+            raise StoreError(f"delete failed for item {item_id}: {exc}") from exc
+        logger.info("item %d deleted", item_id)
 
     def _select_items(
         self, where: str = "", params: tuple[object, ...] = ()
@@ -163,37 +321,49 @@ class Store:
         return self._item_row(rows[0])
 
     def search(
-        self, query_vec: np.ndarray, top_k: int
+        self, query_vec: np.ndarray, top_k: int, query_text: str = ""
     ) -> list[dict[str, object]]:
-        """cosine search over all chunks; return the top_k best matches"""
+        """hybrid search: cosine ranked list fused with the bm25 ranked list"""
         candidates = self._load_embeddings()
         if not candidates:
             logger.warning("search on empty store; returned no sources")
             return []
-        matrix = np.vstack([vec for _, _, _, vec in candidates])
+        matrix = np.vstack([vec for _, _, _, _, vec in candidates])
         scores = self._cosine_row(query_vec, matrix)
-        order = np.argsort(-scores)[:top_k]
+        position_by_id = {candidates[position][0]: position for position in range(len(candidates))}
+
+        rrf_k = 60.0
+        fused: dict[int, float] = {}
+        for rank, position in enumerate(np.argsort(-scores)[: top_k * 4]):
+            chunk_id = candidates[position][0]
+            fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (rrf_k + rank + 1)
+        if query_text:
+            for rank, chunk_id in enumerate(self._fts_chunk_ids(query_text, top_k * 4)):
+                if chunk_id in position_by_id:
+                    fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (rrf_k + rank + 1)
+
+        ordered = sorted(fused, key=fused.get, reverse=True)[:top_k]  # type: ignore[arg-type]
         return [
             {
-                "item_id": candidates[position][0],
-                "chunk_index": candidates[position][1],
-                "text": candidates[position][2],
-                "score": float(scores[position]),
+                "item_id": candidates[position_by_id[chunk_id]][1],
+                "chunk_index": candidates[position_by_id[chunk_id]][2],
+                "text": candidates[position_by_id[chunk_id]][3],
+                "score": float(scores[position_by_id[chunk_id]]),
             }
-            for position in order
+            for chunk_id in ordered
         ]
 
-    def _load_embeddings(self) -> list[tuple[int, int, str, np.ndarray]]:
+    def _load_embeddings(self) -> list[tuple[int, int, int, str, np.ndarray]]:
         """read every chunk row off disk; used as the search source"""
         with self._lock:
             try:
                 rows = self._conn.execute(
-                    "SELECT item_id, chunk_index, text, embedding FROM chunks"
+                    "SELECT id, item_id, chunk_index, text, embedding FROM chunks"
                 ).fetchall()
             except sqlite3.Error as exc:
                 raise StoreError(f"read failed: {exc}") from exc
         return [
-            (row["item_id"], row["chunk_index"], row["text"], _decode(row["embedding"]))
+            (row["id"], row["item_id"], row["chunk_index"], row["text"], _decode(row["embedding"]))
             for row in rows
         ]
 

@@ -118,3 +118,37 @@ def test_close_is_idempotent(tmp_path: Any) -> None:
     store = Store(str(tmp_path / "t.db"))
     store.close()
     store.close()
+
+
+def test_hybrid_search_prefers_the_keyword_hit(tmp_path: Any) -> None:
+    """identical cosine scores: the keyword match wins by fusion"""
+    store = Store(str(tmp_path / "hyb.db"))
+    vec = _vec(1.0)
+    store.add_item("note", "sqlite chunks get stored", "", ["sqlite chunks get stored"], [vec])
+    store.add_item("note", "postgres rows get stored", "", ["postgres rows get stored"], [vec])
+    hits = store.search(vec, top_k=2, query_text="sqlite")
+    store.close()
+    assert len(hits) == 2
+    assert hits[0]["text"] == "sqlite chunks get stored"
+
+
+def test_add_item_shell_and_chunks_round_trip(tmp_path: Any) -> None:
+    """a shell stays empty until chunks are attached"""
+    store = Store(str(tmp_path / "shell.db"))
+    shell = store.add_item_shell("note", "raw content", "")
+    assert shell["chunk_count"] == 0
+    count = store.add_item_chunks(shell["id"], ["raw content"], [_vec(1.0)])
+    assert count == 1
+    item = store.get_item(shell["id"])
+    assert item is not None
+    assert item["chunk_count"] == 1
+    store.close()
+
+
+def test_delete_item_removes_its_chunks(tmp_path: Any) -> None:
+    """a deleted item leaves nothing behind"""
+    store = Store(str(tmp_path / "del.db"))
+    item_id = store.add_item("note", "gone soon", "", ["gone soon"], [_vec(1.0)])
+    store.delete_item(item_id)
+    assert store.list_items() == []
+    store.close()
