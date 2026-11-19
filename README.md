@@ -50,6 +50,23 @@ npm run dev
 
 Open the URL Vite prints, by default `http://localhost:5173`.
 
+## Demo mode
+
+One command seeds the store with six notes about this codebase and one live URL (PostgreSQL insert documentation, about 59 chunks):
+
+```powershell
+cd backend
+.venv\Scripts\python.exe scripts/seed_demo.py
+```
+
+The script refuses to run on a non-empty store. Pass `--reset` to wipe and reseed; the existing data will be deleted.
+
+```powershell
+.venv\Scripts\python.exe scripts/seed_demo.py --reset
+```
+
+Ask the demo: `what chunking strategy does knowledge inbox use?`, `how does citation verification work?`, or `what does the RETURNING clause do?`
+
 ## API
 
 | Route | Body | Returns |
