@@ -10,6 +10,20 @@ Knowledge Inbox is a personal knowledge inbox. Save a note or a URL. Ask a quest
 
 No accounts exist. The app is single-user. No authentication is required.
 
+![Home screen](assets/screenshot-home.png)
+
+Ask a question. The answer shows its sources with a score for each.
+
+![Answer with cited sources](assets/screenshot-answer.png)
+
+The Logbook drawer lists the saved items.
+
+![Logbook drawer](assets/screenshot-logbook.png)
+
+The animation shows the empty state, a question and its answer, and the Logbook drawer.
+
+![Walkthrough](assets/demo.gif)
+
 ## Stack
 
 - Backend: FastAPI, SQLite, numpy, fastembed (`BAAI/bge-small-en-v1.5`). LLM calls go through httpx to OpenRouter.
@@ -97,19 +111,6 @@ Status codes: `202` ingest accepted, `200` success, `400` the content held no te
 - **Async ingest:** The fetch and the validation run before the response. The embed runs in the background. The response returns `202` with `status: "pending"`.
 - **What breaks at scale:** The cosine scan reads every chunk on every query. Past fifty thousand chunks, move to a vector index. The store runs behind one lock. A second process needs a database that accepts concurrent connections.
 
-## Fetcher limits
-
-The server sends `KnowledgeInbox/0.1 (server-side page fetcher)` as the user agent. Some sites block that fetch anyway. Wikipedia returns `403` to the HTTP client even though a browser passes the same headers. PostgreSQL documentation accepts the fetch.
-
-## Tests
-
-```powershell
-cd backend
-.venv\Scripts\python.exe -m pytest tests/ -q
-```
-
-72 tests pass. They cover the store, the chunker, the HTML extractor, the fetch path, the embedding shape, the RAG loop, and all three endpoints. Every test runs offline.
-
 ## Layout
 
 ```
@@ -118,3 +119,4 @@ backend/tests/    one test module per app module
 backend/scripts/  the demo seed
 frontend/src/     the home screen with all interactive surfaces
 ```
+

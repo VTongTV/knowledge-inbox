@@ -12,7 +12,11 @@ logger = logging.getLogger(__name__)
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]*")
 _SKIP_TAGS = frozenset({"script", "style"})
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
-_USER_AGENT = "KnowledgeInbox/0.1 (server-side page fetcher)"
+# a common desktop chrome string. sites that gate on a browser header get one.
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
 
 
 class FetchError(ValueError):

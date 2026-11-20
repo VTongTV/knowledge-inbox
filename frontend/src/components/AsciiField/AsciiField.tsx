@@ -1,4 +1,4 @@
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
@@ -185,10 +185,13 @@ export function AsciiField({ layer = "all" }: FieldProps) {
     };
   }, []);
 
+  const school = schoolRef.current;
+  if (!school) return null;
   return (
     <div ref={hostRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} aria-hidden>
       <Canvas
         orthographic
+        frameloop="demand"
         camera={{ left: -size.width / 2, right: size.width / 2, top: size.height / 2, bottom: -size.height / 2, near: -10, far: 10 }}
         dpr={[1, 2]}
         gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
@@ -312,11 +315,11 @@ function SchoolScene({ school, width, height, reducedMotion, showBlur, showSharp
 
   const drawn = useRef(false);
 
-  useFrame((state) => {
+  const invalidate = useThree((state) => state.invalidate);
+
+  const paint = () => {
     if (reducedMotion && drawn.current) return;
-    if (document.hidden) return;
-    const t = reducedMotion ? 0 : state.clock.elapsedTime;
-    school.update(t);
+    school.update(reducedMotion ? 0 : performance.now() / 1000);
     drawn.current = true;
 
     const dummy = scratch.matrix;
@@ -386,7 +389,16 @@ function SchoolScene({ school, width, height, reducedMotion, showBlur, showSharp
       alphaAttr.needsUpdate = true;
       glyphColorAttr.needsUpdate = true;
     }
-  });
+    invalidate();
+  };
+
+  useEffect(() => {
+    paint();
+    const id = window.setInterval(() => {
+      if (!reducedMotion) paint();
+    }, 120);
+    return () => window.clearInterval(id);
+  }, [reducedMotion]);
 
   return (
     <>
